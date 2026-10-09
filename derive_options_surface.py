@@ -354,6 +354,7 @@ HTML_TEMPLATE = r'''<!doctype html>
 <script>
 const DATA = __PAYLOAD__;
 const COLORS = ['#214f70','#9a6a24','#39745a','#7d556f','#50796f','#8b5f46','#536f8a','#7b744a','#48667a','#8a625d','#5f6a72','#6f604e','#3f725f','#72566f'];
+const SURFACE_COLORS=[[0,'#440154'],[.13,'#482878'],[.25,'#3e4989'],[.38,'#31688e'],[.5,'#26828e'],[.63,'#1f9e89'],[.75,'#35b779'],[.86,'#6ece58'],[.94,'#b5de2b'],[1,'#fde725']];
 const axisStyle={gridcolor:'#e3e5e2',zerolinecolor:'#aeb4b0',linecolor:'#c5c9c5',tickcolor:'#c5c9c5',showline:true,linewidth:1,automargin:true};
 const baseLayout={paper_bgcolor:'#ffffff',plot_bgcolor:'#ffffff',font:{color:'#31363b',family:'-apple-system,BlinkMacSystemFont,\"Segoe UI\",Arial,sans-serif',size:12},title:{font:{size:14,color:'#24292e'},y:.96},margin:{l:62,r:24,t:52,b:52},legend:{orientation:'h',y:-.2,font:{size:11,color:'#555c63'}},xaxis:{...axisStyle},yaxis:{...axisStyle},hoverlabel:{bgcolor:'#1f252a',bordercolor:'#1f252a',font:{color:'#ffffff',size:12}}};
 const config = {responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']};
@@ -387,8 +388,8 @@ function renderVolatility() {
   const z=[],expiryLabels=[];
   for(const expiry of expiries){const points=groups[expiry].sort((a,b)=>a.moneyness-b.moneyness);z.push(xs.map(x=>interpolate(points,x,source)));expiryLabels.push(new Date(`${expiry}T00:00:00Z`).toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'2-digit',timeZone:'UTC'}));}
   const surfaceData=[
-    {type:'heatmap',x:xs,y:expiryLabels,z,zsmooth:'best',connectgaps:false,colorscale:[[0,'#eef2f3'],[.22,'#cbd9df'],[.48,'#89a9b8'],[.74,'#4f778f'],[1,'#17384f']],colorbar:{title:{text:'IV %',font:{size:11,color:'#555c63'}},thickness:10,outlinewidth:0,tickfont:{size:10,color:'#555c63'}},customdata:z.map((row,i)=>row.map(()=>expiries[i])),hovertemplate:'Expiry %{customdata}<br>Moneyness %{x:.1f}%<br>IV %{z:.2f}%<extra></extra>'},
-    {type:'contour',x:xs,y:expiryLabels,z,connectgaps:false,showscale:false,hoverinfo:'skip',contours:{coloring:'none',showlines:true,showlabels:!compact,labelfont:{size:9,color:'#4f5960'}},line:{color:'rgba(255,255,255,.78)',width:.65}}
+    {type:'heatmap',x:xs,y:expiryLabels,z,zsmooth:'best',connectgaps:false,colorscale:SURFACE_COLORS,colorbar:{title:{text:'IV %',font:{size:11,color:'#555c63'}},thickness:12,outlinewidth:0,tickfont:{size:10,color:'#555c63'},tickformat:'.0f'},customdata:z.map((row,i)=>row.map(()=>expiries[i])),hovertemplate:'Expiry %{customdata}<br>Moneyness %{x:.1f}%<br>IV %{z:.2f}%<extra></extra>'},
+    {type:'contour',x:xs,y:expiryLabels,z,connectgaps:false,showscale:false,hoverinfo:'skip',contours:{coloring:'none',showlines:true,showlabels:!compact,labelfont:{size:9,color:'#20262b'}},line:{color:'rgba(20,28,32,.46)',width:.65}}
   ];
   Plotly.react('surface',surfaceData,{...baseLayout,title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} by expiry and moneyness`,x:.035},xaxis:{...baseLayout.xaxis,title:'Strike / forward (%)'},yaxis:{...baseLayout.yaxis,title:'Expiry (UTC)',type:'category',categoryorder:'array',categoryarray:expiryLabels},margin:compact?compactMargin:{l:74,r:48,t:52,b:56}},config);
   const smileTraces=expiries.map((expiry,i)=>({type:'scatter',mode:'lines+markers',name:expiry,x:groups[expiry].map(r=>r.moneyness),y:groups[expiry].map(r=>r[source]),line:{color:COLORS[i%COLORS.length],width:1.35},marker:{size:3,color:COLORS[i%COLORS.length]},hovertemplate:'%{x:.1f}% moneyness<br>%{y:.2f}% IV<extra>'+expiry+'</extra>'}));
