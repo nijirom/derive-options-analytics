@@ -311,6 +311,9 @@ HTML_TEMPLATE = r'''<!doctype html>
     main { width:min(1480px,calc(100% - 48px)); margin:0 auto; padding:0 0 40px; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
     .panel { min-width:0; padding:8px; overflow:hidden; background:var(--surface); border:1px solid var(--line); } .wide { grid-column:1/-1; }
     #surface { height:500px; } #term,#smiles,#fairValue,#deviation { height:350px; }
+    .surface-panel { background:#0c1525; border-color:#243149; border-radius:4px; }
+    .surface-panel .note { color:#91a4bd; }
+    .surface-panel .modebar-btn path { fill:#71849d!important; }
     .js-plotly-plot,.plot-container,.svg-container { max-width:100%!important; }
     .chain-panel { padding:0; }
     .table-caption { display:flex; justify-content:space-between; gap:16px; padding:11px 12px; border-bottom:1px solid var(--line); color:#343a40; font-size:12px; font-weight:600; }
@@ -344,7 +347,7 @@ HTML_TEMPLATE = r'''<!doctype html>
     <div class="card"><div class="k">Options with live quotes</div><div class="v" id="quotes"></div></div>
   </section>
   <main>
-    <section class="panel wide"><div id="surface"></div><div class="note">Each row is one evenly spaced expiry; color encodes implied volatility across strike/forward moneyness. Blank cells fall outside the listed strike range.</div></section>
+    <section class="panel wide surface-panel"><div id="surface"></div><div class="note">Strike/forward moneyness normalizes each expiry. Empty cells are outside that smile's available range.</div></section>
     <section class="panel"><div id="smiles"></div></section>
     <section class="panel"><div id="term"></div></section>
     <section class="panel"><div id="fairValue"></div><div class="note">Fair value uses Black-76 with a leave-one-out local quadratic fit of neighboring Derive mark IVs. Derive mark and live quotes remain separate observations.</div></section>
@@ -385,16 +388,16 @@ function renderVolatility() {
     Plotly.react('term',[],emptyLayout('ATM term structure','No IV observations for this selection'),config);
     document.querySelector('#atm').textContent='—'; document.querySelector('#points').textContent='0'; return;
   }
-  const z=[],expiryLabels=[];
-  for(const expiry of expiries){const points=groups[expiry].sort((a,b)=>a.moneyness-b.moneyness);z.push(xs.map(x=>interpolate(points,x,source)));expiryLabels.push(new Date(`${expiry}T00:00:00Z`).toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'2-digit',timeZone:'UTC'}));}
+  const z=[],ys=[];
+  for(const expiry of expiries){const points=groups[expiry].sort((a,b)=>a.moneyness-b.moneyness);z.push(xs.map(x=>interpolate(points,x,source)));ys.push(points[0].days);}
   const surfaceData=[{
-    type:'contour',x:xs,y:expiryLabels,z,connectgaps:false,
-    colorscale:[[0,'#eef2f3'],[.22,'#cbd9df'],[.48,'#89a9b8'],[.74,'#4f778f'],[1,'#17384f']],
-    colorbar:{title:{text:'IV %',font:{size:11,color:'#555c63'}},thickness:10,outlinewidth:0,tickfont:{size:10,color:'#555c63'}},
-    hovertemplate:'Expiry %{y}<br>Moneyness %{x:.1f}%<br>IV %{z:.2f}%<extra></extra>',
-    contours:{coloring:'heatmap',showlines:true,showlabels:!compact,labelfont:{size:9,color:'#31363b'}},line:{color:'#ffffff',width:.45}
+    type:'surface',x:xs,y:ys,z,connectgaps:false,colorscale:SURFACE_COLORS,
+    colorbar:{title:{text:'IV %',font:{size:12,color:'#d7e0ea'}},thickness:12,outlinewidth:0,tickfont:{size:10,color:'#d7e0ea'},tickformat:'.0f'},
+    customdata:z.map((row,i)=>row.map(()=>expiries[i])),hovertemplate:'Expiry %{customdata}<br>DTE %{y:.1f}<br>Moneyness %{x:.1f}%<br>IV %{z:.2f}%<extra></extra>',
+    contours:{z:{show:true,usecolormap:true,highlightcolor:'#d8fff7',project:{z:true}}},
+    lighting:{ambient:.72,diffuse:.82,roughness:.7,specular:.16,fresnel:.08},lightposition:{x:100,y:-120,z:180}
   }];
-  Plotly.react('surface',surfaceData,{...baseLayout,title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} surface`,x:.035},xaxis:{...baseLayout.xaxis,title:'Strike / forward (%)'},yaxis:{...baseLayout.yaxis,title:'Expiry (UTC)',type:'category',categoryorder:'array',categoryarray:expiryLabels},margin:compact?compactMargin:{l:74,r:48,t:52,b:56}},config);
+  Plotly.react('surface',surfaceData,{...baseLayout,paper_bgcolor:'#0c1525',plot_bgcolor:'#0c1525',font:{...baseLayout.font,color:'#d7e0ea'},title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} surface`,x:.035,font:{size:14,color:'#d7e0ea'}},scene:{bgcolor:'#0c1525',camera:{eye:{x:-1.38,y:1.58,z:1.02}},aspectmode:'manual',aspectratio:{x:1.45,y:1,z:.8},xaxis:{title:'Strike / forward (%)',color:'#d7e0ea',gridcolor:'#223249',zerolinecolor:'#3a4a61',backgroundcolor:'#0c1525',showbackground:true},yaxis:{title:'Days to expiry',color:'#d7e0ea',gridcolor:'#223249',zerolinecolor:'#3a4a61',backgroundcolor:'#0c1525',showbackground:true},zaxis:{title:'Implied volatility (%)',color:'#d7e0ea',gridcolor:'#223249',zerolinecolor:'#3a4a61',backgroundcolor:'#0c1525',showbackground:true}},margin:compact?{l:0,r:0,t:48,b:0}:{l:8,r:26,t:52,b:8}},config);
   const smileTraces=expiries.map((expiry,i)=>({type:'scatter',mode:'lines+markers',name:expiry,x:groups[expiry].map(r=>r.moneyness),y:groups[expiry].map(r=>r[source]),line:{color:COLORS[i%COLORS.length],width:1.35},marker:{size:3,color:COLORS[i%COLORS.length]},hovertemplate:'%{x:.1f}% moneyness<br>%{y:.2f}% IV<extra>'+expiry+'</extra>'}));
   Plotly.react('smiles',smileTraces,{...baseLayout,title:{text:'Volatility smiles',x:.04},xaxis:{...baseLayout.xaxis,title:'Moneyness (%)'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},showlegend:false,margin:compact?compactMargin:{l:58,r:18,t:50,b:48}},config);
   const atm=expiries.map(expiry=>groups[expiry].reduce((best,r)=>Math.abs(r.moneyness-100)<Math.abs(best.moneyness-100)?r:best));
