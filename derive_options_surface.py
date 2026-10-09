@@ -1,0 +1,496 @@
+#!/usr/bin/env python3
+"""Build multi-currency Derive option surfaces and fair-value diagnostics.
+
+Only public market-data endpoints are used. No wallet, API key, or session key
+is read or required.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import sys
+import time
+import urllib.error
+import urllib.request
+import webbrowser
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+API_BASES = {
+    "mainnet": "https://api.derive.xyz/v3",
+    "testnet": "https://testnet.api.derive.xyz/v3",
+}
+USER_AGENT = "derive-options-surface/2.0"
+
+
+def public_request(base_url: str, method: str, params: dict[str, Any], timeout: float) -> Any:
+    """Call one idempotent Derive public endpoint with bounded retries."""
+    request = urllib.request.Request(
+        f"{base_url}/{method}",
+        data=json.dumps(params, separators=(",", ":")).encode("utf-8"),
+        headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
+        method="POST",
+    )
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                envelope = json.load(response)
+            if "error" in envelope:
+                error = envelope["error"]
+                raise RuntimeError(f"Derive API error {error.get('code')}: {error.get('message')} ({error.get('data')})")
+            if "result" not in envelope:
+                raise RuntimeError("Derive API returned neither a result nor an error")
+            return envelope["result"]
+        except urllib.error.HTTPError as error:
+            last_error = error
+            if error.code not in {429, 500, 502, 503, 504} or attempt == 2:
+                detail = error.read(512).decode("utf-8", errors="replace")
+                raise RuntimeError(f"Derive HTTP {error.code}: {detail}") from error
+        except (urllib.error.URLError, TimeoutError) as error:
+            last_error = error
+            if attempt == 2:
+                break
+        time.sleep(0.5 * (2**attempt))
+    raise RuntimeError(f"Derive request failed after 3 attempts: {last_error}")
+
+
+def fetch_instruments(base_url: str, timeout: float) -> list[dict[str, Any]]:
+    """Fetch every live-option definition, following Derive pagination."""
+    instruments: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        result = public_request(
+            base_url,
+            "public/get_all_instruments",
+            {"expired": False, "instrument_type": "option", "page": page, "page_size": 1000},
+            timeout,
+        )
+        instruments.extend(result["instruments"])
+        if page >= int(result["pagination"]["num_pages"]):
+            return instruments
+        page += 1
+
+
+def fetch_tickers(
+    base_url: str,
+    requests: list[tuple[str, str]],
+    timeout: float,
+) -> dict[str, dict[str, Any]]:
+    """Fetch option tickers in one batch per currency/expiry pair."""
+    tickers: dict[str, dict[str, Any]] = {}
+
+    def fetch(currency: str, expiry_date: str) -> dict[str, dict[str, Any]]:
+        result = public_request(
+            base_url,
+            "public/get_tickers",
+            {"instrument_type": "option", "currency": currency, "expiry_date": int(expiry_date)},
+            timeout,
+        )
+        return result["tickers"]
+
+    with ThreadPoolExecutor(max_workers=min(6, len(requests))) as executor:
+        futures = {executor.submit(fetch, currency, expiry): (currency, expiry) for currency, expiry in requests}
+        for future in as_completed(futures):
+            currency, expiry = futures[future]
+            try:
+                tickers.update(future.result())
+            except Exception as error:
+                raise RuntimeError(f"Could not fetch {currency} tickers for {expiry}: {error}") from error
+    return tickers
+
+
+def as_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def positive_float(value: Any) -> float | None:
+    number = as_float(value)
+    return number if number is not None and number > 0 else None
+
+
+def deviation_percent(price: float | None, fair_value: float) -> float | None:
+    return (price / fair_value - 1) * 100 if price is not None and fair_value > 0 else None
+
+def solve_3x3(matrix: list[list[float]], vector: list[float]) -> list[float] | None:
+    """Solve a 3x3 linear system with partial pivoting."""
+    augmented = [row[:] + [value] for row, value in zip(matrix, vector)]
+    for column in range(3):
+        pivot = max(range(column, 3), key=lambda row: abs(augmented[row][column]))
+        if abs(augmented[pivot][column]) < 1e-12:
+            return None
+        augmented[column], augmented[pivot] = augmented[pivot], augmented[column]
+        scale = augmented[column][column]
+        augmented[column] = [value / scale for value in augmented[column]]
+        for row in range(3):
+            if row == column:
+                continue
+            factor = augmented[row][column]
+            augmented[row] = [
+                current - factor * pivot_value
+                for current, pivot_value in zip(augmented[row], augmented[column])
+            ]
+    return [augmented[row][3] for row in range(3)]
+
+
+def fitted_iv(target: dict[str, Any], peers: list[dict[str, Any]]) -> float:
+    """Leave-one-out local quadratic fit of mark IV over log-moneyness."""
+    target_x = math.log(target["strike"] / target["forward"])
+    neighbors = sorted(
+        (peer for peer in peers if peer["name"] != target["name"]),
+        key=lambda peer: abs(math.log(peer["strike"] / peer["forward"]) - target_x),
+    )[:10]
+    if len(neighbors) < 3:
+        return target["markIv"]
+
+    samples = [
+        (math.log(peer["strike"] / peer["forward"]) - target_x, peer["markIv"])
+        for peer in neighbors
+    ]
+    sums = [sum(dx**power for dx, _ in samples) for power in range(5)]
+    matrix = [
+        [sums[0], sums[1], sums[2]],
+        [sums[1], sums[2], sums[3]],
+        [sums[2], sums[3], sums[4]],
+    ]
+    vector = [sum(iv * dx**power for dx, iv in samples) for power in range(3)]
+    coefficients = solve_3x3(matrix, vector)
+    if coefficients is None:
+        return target["markIv"]
+
+    neighbor_ivs = [iv for _, iv in samples]
+    lower = max(1.0, min(neighbor_ivs) * 0.5)
+    upper = min(500.0, max(neighbor_ivs) * 1.5)
+    return min(max(coefficients[0], lower), upper)
+
+
+def black76_value(
+    option_type: str,
+    forward: float,
+    strike: float,
+    years: float,
+    volatility_percent: float,
+    discount_factor: float,
+) -> float:
+    """Black-76 option value using forward, discount factor, and annualized IV."""
+    if years <= 0 or volatility_percent <= 0:
+        intrinsic = max(forward - strike, 0) if option_type == "C" else max(strike - forward, 0)
+        return discount_factor * intrinsic
+    sigma_sqrt_t = volatility_percent / 100 * math.sqrt(years)
+    d1 = (math.log(forward / strike) + 0.5 * sigma_sqrt_t**2) / sigma_sqrt_t
+    d2 = d1 - sigma_sqrt_t
+    normal_cdf = lambda value: 0.5 * (1 + math.erf(value / math.sqrt(2)))
+    if option_type == "C":
+        value = discount_factor * (forward * normal_cdf(d1) - strike * normal_cdf(d2))
+    else:
+        value = discount_factor * (strike * normal_cdf(-d2) - forward * normal_cdf(-d1))
+    return max(value, 0.0)
+
+
+def apply_fair_values(records: list[dict[str, Any]]) -> None:
+    """Attach smooth-smile fair values and observed-price deviations in place."""
+    groups: dict[tuple[str, int, str], list[dict[str, Any]]] = {}
+    for row in records:
+        groups.setdefault((row["currency"], row["expiry"], row["type"]), []).append(row)
+
+    for row in records:
+        peers = groups[(row["currency"], row["expiry"], row["type"])]
+        fair_iv = fitted_iv(row, peers)
+        fair_value = black76_value(
+            row["type"],
+            row["forward"],
+            row["strike"],
+            row["days"] / 365.25,
+            fair_iv,
+            row["discountFactor"],
+        )
+        row["fairIv"] = fair_iv
+        row["fairValue"] = fair_value
+        row["markDeviation"] = row["markPrice"] - fair_value
+        row["markDeviationPct"] = deviation_percent(row["markPrice"], fair_value)
+        for field in ("bid", "ask", "mid"):
+            price = row[field]
+            row[f"{field}Deviation"] = price - fair_value if price is not None else None
+            row[f"{field}DeviationPct"] = deviation_percent(price, fair_value)
+
+
+
+
+def build_records(
+    instruments: list[dict[str, Any]],
+    tickers: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Join definitions and tickers, then calculate smooth-smile fair values."""
+    records: list[dict[str, Any]] = []
+    for instrument in instruments:
+        if not instrument.get("is_active"):
+            continue
+        name = instrument["instrument_name"]
+        ticker = tickers.get(name)
+        details = instrument.get("option_details")
+        pricing = ticker.get("option_pricing") if ticker else None
+        if not ticker or not details or not pricing:
+            continue
+
+        strike = positive_float(details.get("strike"))
+        forward = positive_float(pricing.get("f"))
+        mark_iv = positive_float(pricing.get("i"))
+        mark_price = as_float(pricing.get("m"))
+        discount_factor = positive_float(pricing.get("df"))
+        if None in (strike, forward, mark_iv, mark_price) or discount_factor is None:
+            continue
+
+        bid = positive_float(ticker.get("b"))
+        ask = positive_float(ticker.get("a"))
+        mid = (bid + ask) / 2 if bid is not None and ask is not None else None
+        expiry = int(details["expiry"])
+        snapshot_ms = int(ticker["t"])
+        records.append(
+            {
+                "currency": instrument["base_currency"],
+                "name": name,
+                "expiry": expiry,
+                "expiryDate": datetime.fromtimestamp(expiry, timezone.utc).strftime("%Y-%m-%d"),
+                "days": max((expiry - snapshot_ms / 1000) / 86400, 0),
+                "strike": strike,
+                "moneyness": strike / forward * 100,
+                "type": details["option_type"],
+                "forward": forward,
+                "discountFactor": discount_factor,
+                "index": float(ticker["I"]),
+                "markIv": mark_iv * 100,
+                "bidIv": (value * 100 if (value := positive_float(pricing.get("bi"))) else None),
+                "askIv": (value * 100 if (value := positive_float(pricing.get("ai"))) else None),
+                "markPrice": mark_price,
+                "bid": bid,
+                "ask": ask,
+                "mid": mid,
+                "openInterest": float(ticker["stats"]["oi"]),
+                "volume24h": float(ticker["stats"]["c"]),
+                "timestamp": snapshot_ms,
+            }
+        )
+    apply_fair_values(records)
+    records.sort(key=lambda row: (row["currency"], row["expiry"], row["strike"], row["type"]))
+    return records
+
+
+HTML_TEMPLATE = r'''<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Derive options surfaces and fair value</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root { color-scheme:dark; --bg:#070b14; --panel:#0e1628; --line:#22304a; --text:#e8edf7; --muted:#93a4bf; --cyan:#41d9ff; --violet:#9b7bff; --green:#63e6a3; --red:#ff668a; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at 15% 0,#12203d 0,transparent 34%),var(--bg); color:var(--text); font:14px/1.45 Inter,Segoe UI,sans-serif; }
+    header { padding:28px 32px 18px; display:flex; justify-content:space-between; align-items:end; gap:20px; }
+    h1 { margin:0; font-size:28px; letter-spacing:-.5px; } h1 span { color:var(--cyan); }
+    .subtitle,.stamp { color:var(--muted); } .stamp { text-align:right; font-size:12px; }
+    .controls { margin:0 32px 18px; padding:14px 16px; display:flex; align-items:center; gap:18px; flex-wrap:wrap; background:#0b1323cc; border:1px solid var(--line); border-radius:12px; }
+    label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    select { margin-left:8px; border:1px solid #31415f; border-radius:7px; background:#121d32; color:var(--text); padding:7px 28px 7px 9px; }
+    .cards { margin:0 32px 18px; display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+    .card,.panel { background:linear-gradient(145deg,#101a2d,#0a111f); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 35px #0004; }
+    .card { padding:15px 17px; } .card .k { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.08em; } .card .v { margin-top:4px; font-size:22px; font-weight:650; }
+    main { padding:0 32px 32px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .panel { min-width:0; padding:8px; } .wide { grid-column:1/-1; }
+    #surface { height:590px; } #term,#smiles,#fairValue,#deviation { height:350px; }
+    .section-title { padding:12px 14px 0; font-size:13px; color:var(--muted); }
+    .table-wrap { overflow:auto; max-height:460px; padding:0; }
+    table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+    th { position:sticky; top:0; z-index:1; background:#111b2e; color:var(--muted); text-align:right; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+    th,td { padding:9px 11px; border-bottom:1px solid #1d2940; white-space:nowrap; text-align:right; }
+    th:first-child,td:first-child { text-align:left; } tbody tr:hover { background:#15213a; }
+    .note { color:var(--muted); padding:5px 8px 10px; font-size:12px; }
+    @media (max-width:1000px) { .cards { grid-template-columns:repeat(2,1fr); } main { grid-template-columns:1fr; } .wide { grid-column:auto; } }
+    @media (max-width:650px) { header { align-items:start; flex-direction:column; } .stamp { text-align:left; } header,.controls,.cards,main { margin-left:14px; margin-right:14px; padding-left:0; padding-right:0; } header { padding-top:20px; } #surface { height:500px; } }
+  </style>
+</head>
+<body>
+  <header><div><h1><span id="currencyName"></span> options analytics</h1><div class="subtitle">Volatility surfaces, Derive fair value, and live quote deviations</div></div><div class="stamp" id="stamp"></div></header>
+  <section class="controls">
+    <label>Currency<select id="currency"></select></label>
+    <label>Vol source<select id="source"><option value="markIv">Mark IV</option><option value="bidIv">Bid IV</option><option value="askIv">Ask IV</option></select></label>
+    <label>Contracts<select id="contract"><option value="otm">OTM composite</option><option value="C">Calls</option><option value="P">Puts</option></select></label>
+    <label>Moneyness<select id="range"><option value="60,140">60–140%</option><option value="75,125" selected>75–125%</option><option value="90,110">90–110%</option><option value="40,180">40–180%</option></select></label>
+    <label>Valuation expiry<select id="valuationExpiry"></select></label>
+  </section>
+  <section class="cards">
+    <div class="card"><div class="k">Index</div><div class="v" id="index"></div></div>
+    <div class="card"><div class="k">ATM IV · nearest expiry</div><div class="v" id="atm"></div></div>
+    <div class="card"><div class="k">Active expiries</div><div class="v" id="expiries"></div></div>
+    <div class="card"><div class="k">Surface points</div><div class="v" id="points"></div></div>
+    <div class="card"><div class="k">Options with live quotes</div><div class="v" id="quotes"></div></div>
+  </section>
+  <main>
+    <section class="panel wide"><div id="surface"></div><div class="note">Strike/forward moneyness normalizes each expiry. Empty cells are outside that smile's available range.</div></section>
+    <section class="panel"><div id="smiles"></div></section>
+    <section class="panel"><div id="term"></div></section>
+    <section class="panel"><div id="fairValue"></div><div class="note">Fair value uses Black-76 with a leave-one-out local quadratic fit of neighboring Derive mark IVs. Derive mark and live quotes remain separate observations.</div></section>
+    <section class="panel"><div id="deviation"></div><div class="note">Deviation is observed price minus fitted fair value. Bid/ask points appear only when live quotes exist; missing quotes are never treated as zero.</div></section>
+    <section class="panel wide table-wrap"><table><thead><tr><th>Instrument</th><th>Days</th><th>Moneyness</th><th>Mark IV</th><th>Fair IV</th><th>Mark</th><th>Fair value</th><th>Mark dev</th><th>Bid</th><th>Bid dev</th><th>Ask</th><th>Ask dev</th><th>OI</th></tr></thead><tbody id="rows"></tbody></table></section>
+  </main>
+<script>
+const DATA = __PAYLOAD__;
+const COLORS = ['#41d9ff','#9b7bff','#ffb657','#ff668a','#63e6a3','#6da5ff','#d979ff','#f6df62','#55c2a9','#fc8d62','#8da0cb','#e78ac3','#a6d854','#ffd92f'];
+const baseLayout = {paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{color:'#cbd5e8',family:'Inter,Segoe UI,sans-serif'},margin:{l:58,r:28,t:52,b:48},legend:{orientation:'h',y:-.2},xaxis:{gridcolor:'#22304a',zerolinecolor:'#526581'},yaxis:{gridcolor:'#22304a',zerolinecolor:'#526581'}};
+const config = {responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']};
+const fmt = (x,d=1) => x == null ? '—' : Number(x).toFixed(d);
+const pct = (x,d=1) => x == null ? '—' : Number(x).toFixed(d)+'%';
+const price = x => x == null ? '—' : Number(x).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6});
+const groupBy = (rows,key) => rows.reduce((groups,row)=>{ const value=row[key]; (groups[value]??=[]).push(row); return groups; },{});
+const currencySelect=document.querySelector('#currency'), expirySelect=document.querySelector('#valuationExpiry');
+for (const currency of DATA.currencies) currencySelect.add(new Option(currency,currency));
+const requestedCurrency=new URLSearchParams(location.search).get('currency')?.toUpperCase();
+currencySelect.value=DATA.currencies.includes(requestedCurrency)?requestedCurrency:(DATA.currencies.includes('ETH')?'ETH':DATA.currencies[0]);
+function currencyRows() { return DATA.records.filter(r=>r.currency===currencySelect.value); }
+function eligible(r) { const contract=document.querySelector('#contract').value; return contract==='otm' ? ((r.moneyness<=100&&r.type==='P')||(r.moneyness>100&&r.type==='C')) : r.type===contract; }
+function rangeBounds() { return document.querySelector('#range').value.split(',').map(Number); }
+function chosen() { const source=document.querySelector('#source').value,[lo,hi]=rangeBounds(); return currencyRows().filter(r=>r[source]!=null&&r.moneyness>=lo&&r.moneyness<=hi&&eligible(r)); }
+function syncExpiries() { const previous=expirySelect.value, rows=currencyRows(), expiries=[...new Set(rows.map(r=>r.expiryDate))].sort(), preferred=expiries.find(expiry=>rows.some(r=>r.expiryDate===expiry&&r.days>=7))??expiries[0]; expirySelect.replaceChildren(...expiries.map(value=>new Option(value,value))); expirySelect.value=expiries.includes(previous)?previous:preferred; }
+function interpolate(points,x,source) { if (!points.length||x<points[0].moneyness||x>points[points.length-1].moneyness) return null; for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i];if(x<=b.moneyness){const width=b.moneyness-a.moneyness;return width===0?(a[source]+b[source])/2:a[source]+(b[source]-a[source])*(x-a.moneyness)/width;}} return points.at(-1)[source]; }
+function emptyLayout(title,message) { return {...baseLayout,title:{text:title,x:.04},annotations:[{text:message,x:.5,y:.5,xref:'paper',yref:'paper',showarrow:false,font:{color:'#93a4bf',size:14}}]}; }
+function renderVolatility() {
+  const currency=currencySelect.value,source=document.querySelector('#source').value,rows=chosen(),groups=groupBy(rows,'expiryDate'),expiries=Object.keys(groups).sort();
+  const [lo,hi]=rangeBounds(),step=(hi-lo)/40,xs=Array.from({length:41},(_,i)=>lo+i*step);
+  if (!rows.length) {
+    Plotly.react('surface',[],emptyLayout(`${currency} volatility surface`,'No IV observations for this selection'),config);
+    Plotly.react('smiles',[],emptyLayout('Volatility smiles','No IV observations for this selection'),config);
+    Plotly.react('term',[],emptyLayout('ATM term structure','No IV observations for this selection'),config);
+    document.querySelector('#atm').textContent='—'; document.querySelector('#points').textContent='0'; return;
+  }
+  const z=[],ys=[];
+  for(const expiry of expiries){const points=groups[expiry].sort((a,b)=>a.moneyness-b.moneyness);z.push(xs.map(x=>interpolate(points,x,source)));ys.push(points[0].days);}
+  Plotly.react('surface',[{type:'surface',x:xs,y:ys,z,connectgaps:false,colorscale:[[0,'#25145e'],[.25,'#3266b3'],[.5,'#21bfd2'],[.75,'#72e09a'],[1,'#ffe66d']],colorbar:{title:'IV %',thickness:13},hovertemplate:'Moneyness %{x:.1f}%<br>DTE %{y:.1f}<br>IV %{z:.2f}%<extra></extra>',contours:{z:{show:true,usecolormap:true,highlightcolor:'#fff',project:{z:true}}}}],{...baseLayout,title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} surface`,x:.03},scene:{bgcolor:'rgba(0,0,0,0)',xaxis:{title:'Strike / forward (%)',gridcolor:'#263551'},yaxis:{title:'Days to expiry',gridcolor:'#263551'},zaxis:{title:'Implied volatility (%)',gridcolor:'#263551'},camera:{eye:{x:1.55,y:1.55,z:.8}}},margin:{l:0,r:0,t:52,b:0}},config);
+  const smileTraces=expiries.map((expiry,i)=>({type:'scatter',mode:'lines+markers',name:expiry,x:groups[expiry].map(r=>r.moneyness),y:groups[expiry].map(r=>r[source]),line:{color:COLORS[i%COLORS.length],width:1.5},marker:{size:4},hovertemplate:'%{x:.1f}% moneyness<br>%{y:.2f}% IV<extra>'+expiry+'</extra>'}));
+  Plotly.react('smiles',smileTraces,{...baseLayout,title:{text:'Volatility smiles',x:.04},xaxis:{...baseLayout.xaxis,title:'Moneyness (%)'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},showlegend:false,margin:{l:58,r:18,t:50,b:48}},config);
+  const atm=expiries.map(expiry=>groups[expiry].reduce((best,r)=>Math.abs(r.moneyness-100)<Math.abs(best.moneyness-100)?r:best));
+  Plotly.react('term',[{type:'scatter',mode:'lines+markers',x:atm.map(r=>r.days),y:atm.map(r=>r[source]),text:atm.map(r=>r.expiryDate),line:{color:'#9b7bff',width:2},marker:{color:'#41d9ff',size:7},hovertemplate:'%{text}<br>DTE %{x:.1f}<br>ATM IV %{y:.2f}%<extra></extra>'}],{...baseLayout,title:{text:'ATM term structure',x:.04},xaxis:{...baseLayout.xaxis,title:'Days to expiry'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},margin:{l:58,r:18,t:50,b:48}},config);
+  document.querySelector('#atm').textContent=pct(atm[0][source],2); document.querySelector('#points').textContent=rows.length;
+}
+function renderValuation() {
+  const currency=currencySelect.value,[lo,hi]=rangeBounds(),expiry=expirySelect.value;
+  const rows=currencyRows().filter(r=>r.expiryDate===expiry&&r.moneyness>=lo&&r.moneyness<=hi&&eligible(r)).sort((a,b)=>a.strike-b.strike);
+  const fairTrace={type:'scatter',mode:'lines',name:'Fitted fair',x:rows.map(r=>r.strike),y:rows.map(r=>r.fairValue),line:{color:'#41d9ff',width:2.5},customdata:rows.map(r=>[r.name,r.moneyness,r.fairIv]),hovertemplate:'%{customdata[0]}<br>Strike %{x}<br>Fair %{y:.6f}<br>Fair IV %{customdata[2]:.2f}%<br>Moneyness %{customdata[1]:.1f}%<extra></extra>'};
+  const markTrace={type:'scatter',mode:'markers',name:'Derive mark',x:rows.map(r=>r.strike),y:rows.map(r=>r.markPrice),marker:{color:'#9b7bff',size:7},customdata:rows.map(r=>r.name),hovertemplate:'%{customdata}<br>Strike %{x}<br>Mark %{y:.6f}<extra></extra>'};
+  const bidTrace={type:'scatter',mode:'markers',name:'Bid',x:rows.filter(r=>r.bid!=null).map(r=>r.strike),y:rows.filter(r=>r.bid!=null).map(r=>r.bid),marker:{color:'#ff668a',symbol:'triangle-down',size:8}};
+  const askTrace={type:'scatter',mode:'markers',name:'Ask',x:rows.filter(r=>r.ask!=null).map(r=>r.strike),y:rows.filter(r=>r.ask!=null).map(r=>r.ask),marker:{color:'#63e6a3',symbol:'triangle-up',size:8}};
+  const valueLayout={...baseLayout,title:{text:`Fair value by strike · ${expiry}`,x:.04},xaxis:{...baseLayout.xaxis,title:'Strike'},yaxis:{...baseLayout.yaxis,title:'Option value'},margin:{l:66,r:18,t:50,b:52}};
+  if (!rows.length) valueLayout.annotations=emptyLayout('', 'No options for this selection').annotations;
+  Plotly.react('fairValue',[fairTrace,markTrace,bidTrace,askTrace],valueLayout,config);
+  const deviationTraces=[
+    {type:'bar',name:'Mark deviation',x:rows.map(r=>r.strike),y:rows.map(r=>r.markDeviation),marker:{color:rows.map(r=>r.markDeviation>=0?'#9b7bff':'#4967a8'),opacity:.75},customdata:rows.map(r=>[r.name,r.markDeviationPct]),hovertemplate:'%{customdata[0]}<br>Deviation %{y:.6f}<br>%{customdata[1]:.2f}%<extra></extra>'},
+    {type:'scatter',mode:'markers',name:'Bid deviation',x:rows.filter(r=>r.bidDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.bidDeviation!=null).map(r=>r.bidDeviation),marker:{color:'#ff668a',symbol:'triangle-down',size:8}},
+    {type:'scatter',mode:'markers',name:'Ask deviation',x:rows.filter(r=>r.askDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.askDeviation!=null).map(r=>r.askDeviation),marker:{color:'#63e6a3',symbol:'triangle-up',size:8}}
+  ];
+  const deviationLayout={...baseLayout,title:{text:`Price deviation from fitted fair · ${expiry}`,x:.04},xaxis:{...baseLayout.xaxis,title:'Strike'},yaxis:{...baseLayout.yaxis,title:'Observed − fair',zeroline:true,zerolinewidth:1.5},margin:{l:66,r:18,t:50,b:52},barmode:'overlay'};
+  Plotly.react('deviation',deviationTraces,deviationLayout,config);
+}
+function renderTable() {
+  const rows=chosen().filter(r=>r.expiryDate===expirySelect.value).sort((a,b)=>a.strike-b.strike);
+  document.querySelector('#rows').innerHTML=rows.map(r=>`<tr><td>${r.name}</td><td>${fmt(r.days,1)}</td><td>${pct(r.moneyness,1)}</td><td>${pct(r.markIv,2)}</td><td>${pct(r.fairIv,2)}</td><td>${price(r.markPrice)}</td><td>${price(r.fairValue)}</td><td>${pct(r.markDeviationPct,2)}</td><td>${price(r.bid)}</td><td>${pct(r.bidDeviationPct,2)}</td><td>${price(r.ask)}</td><td>${pct(r.askDeviationPct,2)}</td><td>${fmt(r.openInterest,1)}</td></tr>`).join('');
+}
+function render() {
+  const rows=currencyRows(),nearest=rows.reduce((best,r)=>!best||r.days<best.days?r:best,null),expiries=new Set(rows.map(r=>r.expiryDate));
+  document.querySelector('#currencyName').textContent=currencySelect.value;
+  document.querySelector('#index').textContent=nearest?'$'+nearest.index.toLocaleString(undefined,{maximumFractionDigits:6}):'—';
+  document.querySelector('#expiries').textContent=expiries.size;
+  document.querySelector('#quotes').textContent=rows.filter(r=>r.bid!=null||r.ask!=null).length;
+  renderVolatility(); renderValuation(); renderTable();
+}
+document.querySelector('#stamp').innerHTML=`Snapshot ${new Date(DATA.timestamp).toLocaleString()}<br>${DATA.environment} · ${DATA.currencies.length} option currencies · public data · no credential used`;
+currencySelect.addEventListener('change',()=>{syncExpiries();render();});
+document.querySelectorAll('#source,#contract,#range,#valuationExpiry').forEach(el=>el.addEventListener('change',render));
+syncExpiries(); render();
+</script>
+</body>
+</html>'''
+
+
+def render_html(environment: str, records: list[dict[str, Any]]) -> str:
+    payload = {
+        "environment": environment,
+        "timestamp": max(row["timestamp"] for row in records),
+        "currencies": sorted({row["currency"] for row in records}),
+        "records": records,
+    }
+    encoded = json.dumps(payload, separators=(",", ":")).replace("</", "<\\/")
+    return HTML_TEMPLATE.replace("__PAYLOAD__", encoded)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Create multi-currency Derive option surfaces and fair-value diagnostics.")
+    parser.add_argument("--currencies", default="ALL", help="Comma-separated option currencies, or ALL (default)")
+    parser.add_argument("--environment", choices=API_BASES, default="mainnet")
+    parser.add_argument("--output", type=Path, default=Path("derive_all_options_surface.html"))
+    parser.add_argument("--max-expiries", type=int, default=0, help="Nearest N expiries per currency; 0 keeps all")
+    parser.add_argument("--timeout", type=float, default=20, help="Per-request timeout in seconds")
+    parser.add_argument("--open", action="store_true", help="Open the generated HTML in the default browser")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    if args.timeout <= 0 or args.max_expiries < 0:
+        print("error: timeout must be positive and max-expiries non-negative", file=sys.stderr)
+        return 2
+
+    base_url = API_BASES[args.environment]
+    instruments = fetch_instruments(base_url, args.timeout)
+    active = [item for item in instruments if item.get("is_active") and item.get("option_details")]
+    available = sorted({item["base_currency"] for item in active})
+    requested_text = args.currencies.strip().upper()
+    requested = available if requested_text == "ALL" else sorted({value.strip() for value in requested_text.split(",") if value.strip()})
+    unknown = sorted(set(requested) - set(available))
+    if unknown:
+        raise RuntimeError(f"No active options for {', '.join(unknown)}. Available: {', '.join(available)}")
+
+    selected_instruments: list[dict[str, Any]] = []
+    ticker_requests: list[tuple[str, str]] = []
+    expiry_count = 0
+    for currency in requested:
+        currency_instruments = [item for item in active if item["base_currency"] == currency]
+        expiries = sorted({int(item["option_details"]["expiry"]) for item in currency_instruments})
+        if args.max_expiries:
+            expiries = expiries[: args.max_expiries]
+        expiry_set = set(expiries)
+        selected_instruments.extend(item for item in currency_instruments if int(item["option_details"]["expiry"]) in expiry_set)
+        ticker_requests.extend(
+            (currency, datetime.fromtimestamp(expiry, timezone.utc).strftime("%Y%m%d")) for expiry in expiries
+        )
+        expiry_count += len(expiries)
+
+    if not ticker_requests:
+        raise RuntimeError("No active option expiries found")
+    tickers = fetch_tickers(base_url, ticker_requests, args.timeout)
+    records = build_records(selected_instruments, tickers)
+    if not records:
+        raise RuntimeError("No priced options found for the selected currencies")
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(render_html(args.environment, records), encoding="utf-8")
+    print(
+        f"Wrote {args.output.resolve()} with {len(records)} options, "
+        f"{len(requested)} currencies, and {expiry_count} currency/expiry groups."
+    )
+    if args.open:
+        webbrowser.open(args.output.resolve().as_uri())
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (RuntimeError, OSError, ValueError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        raise SystemExit(1)
