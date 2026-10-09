@@ -296,15 +296,17 @@ HTML_TEMPLATE = r'''<!doctype html>
     * { box-sizing:border-box; }
     html { background:var(--canvas); }
     body { margin:0; border-top:4px solid var(--navy-dark); background:var(--canvas); color:var(--ink); font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif; }
-    header { width:min(1480px,calc(100% - 48px)); margin:0 auto; padding:30px 0 22px; display:flex; justify-content:space-between; align-items:flex-end; gap:32px; border-bottom:1px solid var(--line-strong); }
+    header { position:relative; width:min(1480px,calc(100% - 48px)); margin:0 auto; padding:30px 46px 22px 0; display:flex; justify-content:space-between; align-items:flex-end; gap:32px; border-bottom:1px solid var(--line-strong); }
     .header-copy { min-width:0; }
     .eyebrow { margin-bottom:7px; color:var(--navy); font:600 11px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.12em; text-transform:uppercase; }
     h1 { margin:0; color:var(--ink); font-size:30px; font-weight:620; letter-spacing:-.035em; } h1 span { color:inherit; }
     .subtitle { margin-top:7px; color:var(--muted); font-size:13px; }
     .stamp { padding-left:22px; border-left:1px solid var(--line); color:var(--muted); text-align:right; font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:nowrap; }
-    .header-meta { display:flex; align-items:center; gap:16px; }
-    .theme-toggle { min-height:34px; padding:6px 11px; border:1px solid var(--line-strong); border-radius:2px; background:var(--surface); color:var(--ink); font:600 11px/1 inherit; white-space:nowrap; cursor:pointer; }
-    .theme-toggle:hover { border-color:var(--navy); } .theme-toggle:focus-visible { outline:2px solid var(--navy); outline-offset:2px; }
+    .header-meta { display:flex; align-items:center; }
+    .theme-toggle { position:absolute; top:24px; right:0; width:34px; height:34px; padding:7px; display:grid; place-items:center; border:1px solid var(--line-strong); border-radius:50%; background:var(--surface); color:var(--ink); cursor:pointer; }
+    .theme-toggle:hover { border-color:var(--navy); color:var(--navy); } .theme-toggle:focus-visible { outline:2px solid var(--navy); outline-offset:2px; }
+    .theme-toggle svg { width:18px; height:18px; display:block; }
+    html[data-theme="dark"] .theme-icon-sun,html[data-theme="light"] .theme-icon-moon { display:none; }
     .controls { width:min(1480px,calc(100% - 48px)); margin:16px auto; padding:14px 16px; display:grid; grid-template-columns:repeat(5,minmax(130px,1fr)); gap:14px; background:var(--surface); border:1px solid var(--line); }
     label { display:flex; flex-direction:column; gap:6px; color:var(--muted); font-size:10px; font-weight:650; text-transform:uppercase; letter-spacing:.09em; }
     select { width:100%; min-height:34px; margin:0; border:1px solid var(--line-strong); border-radius:2px; background:var(--surface); color:var(--ink); padding:6px 9px; font:500 13px/1.2 inherit; outline:none; }
@@ -336,7 +338,7 @@ HTML_TEMPLATE = r'''<!doctype html>
   </style>
 </head>
 <body>
-  <header><div class="header-copy"><div class="eyebrow">Derive options monitor</div><h1><span id="currencyName"></span> volatility &amp; valuation</h1><div class="subtitle">Cross-sectional volatility, model fair value, and market dislocation</div></div><div class="header-meta"><button class="theme-toggle" id="themeToggle" type="button">Light mode</button><div class="stamp" id="stamp"></div></div></header>
+  <header><div class="header-copy"><div class="eyebrow">Derive options monitor</div><h1><span id="currencyName"></span> volatility &amp; valuation</h1><div class="subtitle">Cross-sectional volatility, model fair value, and market dislocation</div></div><div class="header-meta"><button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to light mode" title="Switch to light mode"><svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><div class="stamp" id="stamp"></div></div></header>
   <section class="controls">
     <label>Currency<select id="currency"></select></label>
     <label>Vol source<select id="source"><option value="markIv">Mark IV</option><option value="bidIv">Bid IV</option><option value="askIv">Ask IV</option></select></label>
@@ -455,8 +457,9 @@ function render() {
 const themeToggle=document.querySelector('#themeToggle');
 function setTheme(theme,persist=false) {
   document.documentElement.dataset.theme=theme;
-  themeToggle.textContent=theme==='dark'?'Light mode':'Dark mode';
-  themeToggle.setAttribute('aria-label',`Switch to ${theme==='dark'?'light':'dark'} mode`);
+  const nextTheme=theme==='dark'?'light':'dark';
+  themeToggle.setAttribute('aria-label',`Switch to ${nextTheme} mode`);
+  themeToggle.setAttribute('title',`Switch to ${nextTheme} mode`);
   if(persist) try{localStorage.setItem('derive-theme',theme)}catch(error){}
   baseLayout=makeBaseLayout();
 }
