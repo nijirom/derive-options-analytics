@@ -289,8 +289,10 @@ HTML_TEMPLATE = r'''<!doctype html>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Derive options surfaces and fair value</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('derive-theme')||'dark'}catch(error){document.documentElement.dataset.theme='dark'}</script>
   <style>
-    :root { color-scheme:light; --canvas:#f4f4f1; --surface:#ffffff; --surface-alt:#f8f8f6; --ink:#1b1f23; --muted:#697078; --line:#d7d9d6; --line-strong:#b9bdb8; --navy:#214f70; --navy-dark:#17384f; --green:#39745a; --red:#a64b40; --amber:#9a6a24; }
+    :root { color-scheme:dark; --canvas:#000000; --surface:#0a0d12; --surface-alt:#10141b; --ink:#edf2f7; --muted:#929cab; --line:#252b35; --line-strong:#39414d; --navy:#7cb7e1; --navy-dark:#214f70; --green:#66c292; --red:#e06d66; --amber:#d7a74f; --table-head:#151a22; --row-alt:#0e1218; --row-hover:#17202b; --chart:#0a0d12; }
+    html[data-theme="light"] { color-scheme:light; --canvas:#f4f4f1; --surface:#ffffff; --surface-alt:#f8f8f6; --ink:#1b1f23; --muted:#697078; --line:#d7d9d6; --line-strong:#b9bdb8; --navy:#214f70; --navy-dark:#17384f; --green:#39745a; --red:#a64b40; --amber:#9a6a24; --table-head:#eceeeb; --row-alt:#fafaf8; --row-hover:#eef3f6; --chart:#ffffff; }
     * { box-sizing:border-box; }
     html { background:var(--canvas); }
     body { margin:0; border-top:4px solid var(--navy-dark); background:var(--canvas); color:var(--ink); font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif; }
@@ -300,10 +302,13 @@ HTML_TEMPLATE = r'''<!doctype html>
     h1 { margin:0; color:var(--ink); font-size:30px; font-weight:620; letter-spacing:-.035em; } h1 span { color:inherit; }
     .subtitle { margin-top:7px; color:var(--muted); font-size:13px; }
     .stamp { padding-left:22px; border-left:1px solid var(--line); color:var(--muted); text-align:right; font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:nowrap; }
+    .header-meta { display:flex; align-items:center; gap:16px; }
+    .theme-toggle { min-height:34px; padding:6px 11px; border:1px solid var(--line-strong); border-radius:2px; background:var(--surface); color:var(--ink); font:600 11px/1 inherit; white-space:nowrap; cursor:pointer; }
+    .theme-toggle:hover { border-color:var(--navy); } .theme-toggle:focus-visible { outline:2px solid var(--navy); outline-offset:2px; }
     .controls { width:min(1480px,calc(100% - 48px)); margin:16px auto; padding:14px 16px; display:grid; grid-template-columns:repeat(5,minmax(130px,1fr)); gap:14px; background:var(--surface); border:1px solid var(--line); }
     label { display:flex; flex-direction:column; gap:6px; color:var(--muted); font-size:10px; font-weight:650; text-transform:uppercase; letter-spacing:.09em; }
     select { width:100%; min-height:34px; margin:0; border:1px solid var(--line-strong); border-radius:2px; background:var(--surface); color:var(--ink); padding:6px 9px; font:500 13px/1.2 inherit; outline:none; }
-    select:hover { border-color:#878d88; } select:focus { border-color:var(--navy); box-shadow:0 0 0 2px #214f7018; }
+    select:hover { border-color:var(--muted); } select:focus { border-color:var(--navy); box-shadow:0 0 0 2px #5f9dcf33; }
     .cards { width:min(1480px,calc(100% - 48px)); margin:0 auto 16px; display:grid; grid-template-columns:repeat(5,1fr); background:var(--surface); border:1px solid var(--line); }
     .card { min-width:0; padding:14px 16px; border-right:1px solid var(--line); } .card:last-child { border-right:0; }
     .card .k { color:var(--muted); font-size:10px; font-weight:650; text-transform:uppercase; letter-spacing:.08em; }
@@ -311,27 +316,27 @@ HTML_TEMPLATE = r'''<!doctype html>
     main { width:min(1480px,calc(100% - 48px)); margin:0 auto; padding:0 0 40px; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
     .panel { min-width:0; padding:8px; overflow:hidden; background:var(--surface); border:1px solid var(--line); } .wide { grid-column:1/-1; }
     #surface { height:500px; } #term,#smiles,#fairValue,#deviation { height:350px; }
-    .surface-panel { background:#0c1525; border-color:#243149; border-radius:4px; }
-    .surface-panel .note { color:#91a4bd; }
-    .surface-panel .modebar-btn path { fill:#71849d!important; }
+    .surface-panel { background:var(--chart); border-color:var(--line); border-radius:4px; }
+    .surface-panel .note { color:var(--muted); }
+    .panel .modebar-btn path { fill:var(--muted)!important; }
     .js-plotly-plot,.plot-container,.svg-container { max-width:100%!important; }
     .chain-panel { padding:0; }
-    .table-caption { display:flex; justify-content:space-between; gap:16px; padding:11px 12px; border-bottom:1px solid var(--line); color:#343a40; font-size:12px; font-weight:600; }
+    .table-caption { display:flex; justify-content:space-between; gap:16px; padding:11px 12px; border-bottom:1px solid var(--line); color:var(--ink); font-size:12px; font-weight:600; }
     .table-caption .hint { color:var(--muted); font-size:10px; font-weight:500; letter-spacing:.02em; }
     .table-wrap { max-height:460px; overflow:auto; }
     table { width:100%; border-collapse:collapse; color:var(--ink); font-size:12px; font-variant-numeric:tabular-nums; }
-    th { position:sticky; top:0; z-index:1; background:#eceeeb; color:#555c63; text-align:right; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; }
-    th,td { padding:9px 10px; border-bottom:1px solid #e4e6e3; white-space:nowrap; text-align:right; }
-    th:first-child,td:first-child { text-align:left; } tbody tr:nth-child(even) { background:#fafaf8; } tbody tr:hover { background:#eef3f6; }
+    th { position:sticky; top:0; z-index:1; background:var(--table-head); color:var(--muted); text-align:right; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; }
+    th,td { padding:9px 10px; border-bottom:1px solid var(--line); white-space:nowrap; text-align:right; }
+    th:first-child,td:first-child { text-align:left; } tbody tr:nth-child(even) { background:var(--row-alt); } tbody tr:hover { background:var(--row-hover); }
     .positive { color:var(--green); } .negative { color:var(--red); }
     .note { min-height:36px; padding:3px 10px 9px; color:var(--muted); font-size:11px; line-height:1.45; }
     @media (max-width:1000px) { .controls { grid-template-columns:repeat(3,1fr); } .cards { grid-template-columns:repeat(2,1fr); } .card { border-bottom:1px solid var(--line); } main { grid-template-columns:1fr; } .wide { grid-column:auto; } }
-    @media (max-width:650px) { body { border-top-width:3px; overflow-x:hidden; } header { align-items:flex-start; flex-direction:column; padding-top:22px; } .stamp { max-width:100%; padding:0; border:0; text-align:left; white-space:normal; overflow-wrap:anywhere; word-break:break-word; } header,.controls,.cards,main { width:calc(100vw - 24px); max-width:calc(100vw - 24px); } .controls { grid-template-columns:1fr; } label,select,.card,.panel { min-width:0; max-width:100%; } .cards { grid-template-columns:1fr 1fr; } .card .k { overflow-wrap:anywhere; } .card:nth-child(5) { grid-column:1/-1; border-right:0; } h1 { font-size:25px; } #surface { height:400px; } #term,#smiles,#fairValue,#deviation { height:310px; } }
+    @media (max-width:650px) { body { border-top-width:3px; overflow-x:hidden; } header { align-items:flex-start; flex-direction:column; padding-top:22px; } .header-meta { width:100%; justify-content:space-between; } .stamp { max-width:100%; padding:0; border:0; text-align:left; white-space:normal; overflow-wrap:anywhere; word-break:break-word; } header,.controls,.cards,main { width:calc(100vw - 24px); max-width:calc(100vw - 24px); } .controls { grid-template-columns:1fr; } label,select,.card,.panel { min-width:0; max-width:100%; } .cards { grid-template-columns:1fr 1fr; } .card .k { overflow-wrap:anywhere; } .card:nth-child(5) { grid-column:1/-1; border-right:0; } h1 { font-size:25px; } #surface { height:400px; } #term,#smiles,#fairValue,#deviation { height:310px; } }
     @media (max-width:480px) { .cards { grid-template-columns:1fr; } .card { border-right:0; } .card:nth-child(5) { grid-column:auto; } }
   </style>
 </head>
 <body>
-  <header><div class="header-copy"><div class="eyebrow">Derive options monitor</div><h1><span id="currencyName"></span> volatility &amp; valuation</h1><div class="subtitle">Cross-sectional volatility, model fair value, and market dislocation</div></div><div class="stamp" id="stamp"></div></header>
+  <header><div class="header-copy"><div class="eyebrow">Derive options monitor</div><h1><span id="currencyName"></span> volatility &amp; valuation</h1><div class="subtitle">Cross-sectional volatility, model fair value, and market dislocation</div></div><div class="header-meta"><button class="theme-toggle" id="themeToggle" type="button">Light mode</button><div class="stamp" id="stamp"></div></div></header>
   <section class="controls">
     <label>Currency<select id="currency"></select></label>
     <label>Vol source<select id="source"><option value="markIv">Mark IV</option><option value="bidIv">Bid IV</option><option value="askIv">Ask IV</option></select></label>
@@ -356,10 +361,21 @@ HTML_TEMPLATE = r'''<!doctype html>
   </main>
 <script>
 const DATA = __PAYLOAD__;
-const COLORS = ['#214f70','#9a6a24','#39745a','#7d556f','#50796f','#8b5f46','#536f8a','#7b744a','#48667a','#8a625d','#5f6a72','#6f604e','#3f725f','#72566f'];
+const LIGHT_COLORS=['#214f70','#9a6a24','#39745a','#7d556f','#50796f','#8b5f46','#536f8a','#7b744a','#48667a','#8a625d','#5f6a72','#6f604e','#3f725f','#72566f'];
+const DARK_COLORS=['#62b9e8','#e2ac4d','#61c68f','#c58bbb','#70b8a5','#dd9870','#82add3','#b8ae68','#5fa8c8','#ce8e89','#9ca9b4','#b39b78','#65bd96','#bd8bb7'];
 const SURFACE_COLORS=[[0,'#440154'],[.13,'#482878'],[.25,'#3e4989'],[.38,'#31688e'],[.5,'#26828e'],[.63,'#1f9e89'],[.75,'#35b779'],[.86,'#6ece58'],[.94,'#b5de2b'],[1,'#fde725']];
-const axisStyle={gridcolor:'#e3e5e2',zerolinecolor:'#aeb4b0',linecolor:'#c5c9c5',tickcolor:'#c5c9c5',showline:true,linewidth:1,automargin:true};
-const baseLayout={paper_bgcolor:'#ffffff',plot_bgcolor:'#ffffff',font:{color:'#31363b',family:'-apple-system,BlinkMacSystemFont,\"Segoe UI\",Arial,sans-serif',size:12},title:{font:{size:14,color:'#24292e'},y:.96},margin:{l:62,r:24,t:52,b:52},legend:{orientation:'h',y:-.2,font:{size:11,color:'#555c63'}},xaxis:{...axisStyle},yaxis:{...axisStyle},hoverlabel:{bgcolor:'#1f252a',bordercolor:'#1f252a',font:{color:'#ffffff',size:12}}};
+const isDarkTheme=()=>document.documentElement.dataset.theme!=='light';
+const seriesColors=()=>isDarkTheme()?DARK_COLORS:LIGHT_COLORS;
+function chartTheme(){
+  return isDarkTheme()
+    ? {paper:'#0a0d12',ink:'#dfe6ee',muted:'#98a5b5',grid:'#273241',zero:'#526071',line:'#435064',hover:'#edf2f7',hoverInk:'#111418',primary:'#69bce5',markerFill:'#0a0d12',fair:'#7ec8ee',mark:'#efb84f',bid:'#ef7770',ask:'#62cf98',positive:'#62a77e',negative:'#c86763',scene:'#0c1525',sceneGrid:'#223249',sceneZero:'#3a4a61'}
+    : {paper:'#ffffff',ink:'#31363b',muted:'#697078',grid:'#e3e5e2',zero:'#aeb4b0',line:'#c5c9c5',hover:'#1f252a',hoverInk:'#ffffff',primary:'#214f70',markerFill:'#ffffff',fair:'#17384f',mark:'#9a6a24',bid:'#a64b40',ask:'#39745a',positive:'#5f806d',negative:'#b35d52',scene:'#ffffff',sceneGrid:'#dde1e4',sceneZero:'#aeb4b0'};
+}
+function makeBaseLayout(){
+  const theme=chartTheme(),axisStyle={gridcolor:theme.grid,zerolinecolor:theme.zero,linecolor:theme.line,tickcolor:theme.line,showline:true,linewidth:1,automargin:true};
+  return {paper_bgcolor:theme.paper,plot_bgcolor:theme.paper,font:{color:theme.ink,family:'-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif',size:12},title:{font:{size:14,color:theme.ink},y:.96},margin:{l:62,r:24,t:52,b:52},legend:{orientation:'h',y:-.2,font:{size:11,color:theme.muted}},xaxis:{...axisStyle},yaxis:{...axisStyle},hoverlabel:{bgcolor:theme.hover,bordercolor:theme.hover,font:{color:theme.hoverInk,size:12}}};
+}
+let baseLayout=makeBaseLayout();
 const config = {responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']};
 const compact=window.matchMedia('(max-width:650px)').matches;
 const compactMargin={l:46,r:10,t:46,b:44};
@@ -378,9 +394,10 @@ function rangeBounds() { return document.querySelector('#range').value.split(','
 function chosen() { const source=document.querySelector('#source').value,[lo,hi]=rangeBounds(); return currencyRows().filter(r=>r[source]!=null&&r.moneyness>=lo&&r.moneyness<=hi&&eligible(r)); }
 function syncExpiries() { const previous=expirySelect.value, rows=currencyRows(), expiries=[...new Set(rows.map(r=>r.expiryDate))].sort(), preferred=expiries.find(expiry=>rows.some(r=>r.expiryDate===expiry&&r.days>=7))??expiries[0]; expirySelect.replaceChildren(...expiries.map(value=>new Option(value,value))); expirySelect.value=expiries.includes(previous)?previous:preferred; }
 function interpolate(points,x,source) { if (!points.length||x<points[0].moneyness||x>points[points.length-1].moneyness) return null; for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i];if(x<=b.moneyness){const width=b.moneyness-a.moneyness;return width===0?(a[source]+b[source])/2:a[source]+(b[source]-a[source])*(x-a.moneyness)/width;}} return points.at(-1)[source]; }
-function emptyLayout(title,message) { return {...baseLayout,title:{text:title,x:.04},annotations:[{text:message,x:.5,y:.5,xref:'paper',yref:'paper',showarrow:false,font:{color:'#697078',size:13}}]}; }
+function emptyLayout(title,message) { const theme=chartTheme(); return {...baseLayout,title:{text:title,x:.04},annotations:[{text:message,x:.5,y:.5,xref:'paper',yref:'paper',showarrow:false,font:{color:theme.muted,size:13}}]}; }
 function renderVolatility() {
   const currency=currencySelect.value,source=document.querySelector('#source').value,rows=chosen(),groups=groupBy(rows,'expiryDate'),expiries=Object.keys(groups).sort();
+  const theme=chartTheme(),colors=seriesColors();
   const [lo,hi]=rangeBounds(),step=(hi-lo)/40,xs=Array.from({length:41},(_,i)=>lo+i*step);
   if (!rows.length) {
     Plotly.react('surface',[],emptyLayout(`${currency} volatility surface`,'No IV observations for this selection'),config);
@@ -392,32 +409,32 @@ function renderVolatility() {
   for(const expiry of expiries){const points=groups[expiry].sort((a,b)=>a.moneyness-b.moneyness);z.push(xs.map(x=>interpolate(points,x,source)));ys.push(points[0].days);}
   const surfaceData=[{
     type:'surface',x:xs,y:ys,z,connectgaps:false,colorscale:SURFACE_COLORS,
-    colorbar:{title:{text:'IV %',font:{size:12,color:'#d7e0ea'}},thickness:12,outlinewidth:0,tickfont:{size:10,color:'#d7e0ea'},tickformat:'.0f'},
+    colorbar:{title:{text:'IV %',font:{size:12,color:theme.ink}},thickness:12,outlinewidth:0,tickfont:{size:10,color:theme.ink},tickformat:'.0f'},
     customdata:z.map((row,i)=>row.map(()=>expiries[i])),hovertemplate:'Expiry %{customdata}<br>DTE %{y:.1f}<br>Moneyness %{x:.1f}%<br>IV %{z:.2f}%<extra></extra>',
-    contours:{z:{show:true,usecolormap:true,highlightcolor:'#d8fff7',project:{z:true}}},
+    contours:{z:{show:true,usecolormap:true,highlightcolor:theme.ink,project:{z:true}}},
     lighting:{ambient:.72,diffuse:.82,roughness:.7,specular:.16,fresnel:.08},lightposition:{x:100,y:-120,z:180}
   }];
-  Plotly.react('surface',surfaceData,{...baseLayout,paper_bgcolor:'#0c1525',plot_bgcolor:'#0c1525',font:{...baseLayout.font,color:'#d7e0ea'},title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} surface`,x:.035,font:{size:14,color:'#d7e0ea'}},scene:{bgcolor:'#0c1525',camera:{eye:{x:-1.38,y:1.58,z:1.02}},aspectmode:'manual',aspectratio:{x:1.45,y:1,z:.8},xaxis:{title:'Strike / forward (%)',color:'#d7e0ea',gridcolor:'#223249',zerolinecolor:'#3a4a61',backgroundcolor:'#0c1525',showbackground:true},yaxis:{title:'Days to expiry',color:'#d7e0ea',gridcolor:'#223249',zerolinecolor:'#3a4a61',backgroundcolor:'#0c1525',showbackground:true},zaxis:{title:'Implied volatility (%)',color:'#d7e0ea',gridcolor:'#223249',zerolinecolor:'#3a4a61',backgroundcolor:'#0c1525',showbackground:true}},margin:compact?{l:0,r:0,t:48,b:0}:{l:8,r:26,t:52,b:8}},config);
-  const smileTraces=expiries.map((expiry,i)=>({type:'scatter',mode:'lines+markers',name:expiry,x:groups[expiry].map(r=>r.moneyness),y:groups[expiry].map(r=>r[source]),line:{color:COLORS[i%COLORS.length],width:1.35},marker:{size:3,color:COLORS[i%COLORS.length]},hovertemplate:'%{x:.1f}% moneyness<br>%{y:.2f}% IV<extra>'+expiry+'</extra>'}));
+  Plotly.react('surface',surfaceData,{...baseLayout,paper_bgcolor:theme.scene,plot_bgcolor:theme.scene,font:{...baseLayout.font,color:theme.ink},title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} surface`,x:.035,font:{size:14,color:theme.ink}},scene:{bgcolor:theme.scene,camera:{eye:{x:-1.38,y:1.58,z:1.02}},aspectmode:'manual',aspectratio:{x:1.45,y:1,z:.8},xaxis:{title:'Strike / forward (%)',color:theme.ink,gridcolor:theme.sceneGrid,zerolinecolor:theme.sceneZero,backgroundcolor:theme.scene,showbackground:true},yaxis:{title:'Days to expiry',color:theme.ink,gridcolor:theme.sceneGrid,zerolinecolor:theme.sceneZero,backgroundcolor:theme.scene,showbackground:true},zaxis:{title:'Implied volatility (%)',color:theme.ink,gridcolor:theme.sceneGrid,zerolinecolor:theme.sceneZero,backgroundcolor:theme.scene,showbackground:true}},margin:compact?{l:0,r:0,t:48,b:0}:{l:8,r:26,t:52,b:8}},config);
+  const smileTraces=expiries.map((expiry,i)=>({type:'scatter',mode:'lines+markers',name:expiry,x:groups[expiry].map(r=>r.moneyness),y:groups[expiry].map(r=>r[source]),line:{color:colors[i%colors.length],width:1.35},marker:{size:3,color:colors[i%colors.length]},hovertemplate:'%{x:.1f}% moneyness<br>%{y:.2f}% IV<extra>'+expiry+'</extra>'}));
   Plotly.react('smiles',smileTraces,{...baseLayout,title:{text:'Volatility smiles',x:.04},xaxis:{...baseLayout.xaxis,title:'Moneyness (%)'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},showlegend:false,margin:compact?compactMargin:{l:58,r:18,t:50,b:48}},config);
   const atm=expiries.map(expiry=>groups[expiry].reduce((best,r)=>Math.abs(r.moneyness-100)<Math.abs(best.moneyness-100)?r:best));
-  Plotly.react('term',[{type:'scatter',mode:'lines+markers',x:atm.map(r=>r.days),y:atm.map(r=>r[source]),text:atm.map(r=>r.expiryDate),line:{color:'#214f70',width:2},marker:{color:'#ffffff',line:{color:'#214f70',width:1.5},size:6},hovertemplate:'%{text}<br>DTE %{x:.1f}<br>ATM IV %{y:.2f}%<extra></extra>'}],{...baseLayout,title:{text:'ATM term structure',x:.04},xaxis:{...baseLayout.xaxis,title:'Days to expiry'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},margin:compact?compactMargin:{l:58,r:18,t:50,b:48}},config);
+  Plotly.react('term',[{type:'scatter',mode:'lines+markers',x:atm.map(r=>r.days),y:atm.map(r=>r[source]),text:atm.map(r=>r.expiryDate),line:{color:theme.primary,width:2},marker:{color:theme.markerFill,line:{color:theme.primary,width:1.5},size:6},hovertemplate:'%{text}<br>DTE %{x:.1f}<br>ATM IV %{y:.2f}%<extra></extra>'}],{...baseLayout,title:{text:'ATM term structure',x:.04},xaxis:{...baseLayout.xaxis,title:'Days to expiry'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},margin:compact?compactMargin:{l:58,r:18,t:50,b:48}},config);
   document.querySelector('#atm').textContent=pct(atm[0][source],2); document.querySelector('#points').textContent=rows.length;
 }
 function renderValuation() {
-  const currency=currencySelect.value,[lo,hi]=rangeBounds(),expiry=expirySelect.value;
+  const [lo,hi]=rangeBounds(),expiry=expirySelect.value,theme=chartTheme();
   const rows=currencyRows().filter(r=>r.expiryDate===expiry&&r.moneyness>=lo&&r.moneyness<=hi&&eligible(r)).sort((a,b)=>a.strike-b.strike);
-  const fairTrace={type:'scatter',mode:'lines',name:'Fitted fair',x:rows.map(r=>r.strike),y:rows.map(r=>r.fairValue),line:{color:'#17384f',width:2.25},customdata:rows.map(r=>[r.name,r.moneyness,r.fairIv]),hovertemplate:'%{customdata[0]}<br>Strike %{x}<br>Fair %{y:.6f}<br>Fair IV %{customdata[2]:.2f}%<br>Moneyness %{customdata[1]:.1f}%<extra></extra>'};
-  const markTrace={type:'scatter',mode:'markers',name:'Derive mark',x:rows.map(r=>r.strike),y:rows.map(r=>r.markPrice),marker:{color:'#9a6a24',size:6,line:{color:'#ffffff',width:.75}},customdata:rows.map(r=>r.name),hovertemplate:'%{customdata}<br>Strike %{x}<br>Mark %{y:.6f}<extra></extra>'};
-  const bidTrace={type:'scatter',mode:'markers',name:'Bid',x:rows.filter(r=>r.bid!=null).map(r=>r.strike),y:rows.filter(r=>r.bid!=null).map(r=>r.bid),marker:{color:'#a64b40',symbol:'triangle-down',size:7}};
-  const askTrace={type:'scatter',mode:'markers',name:'Ask',x:rows.filter(r=>r.ask!=null).map(r=>r.strike),y:rows.filter(r=>r.ask!=null).map(r=>r.ask),marker:{color:'#39745a',symbol:'triangle-up',size:7}};
+  const fairTrace={type:'scatter',mode:'lines',name:'Fitted fair',x:rows.map(r=>r.strike),y:rows.map(r=>r.fairValue),line:{color:theme.fair,width:2.25},customdata:rows.map(r=>[r.name,r.moneyness,r.fairIv]),hovertemplate:'%{customdata[0]}<br>Strike %{x}<br>Fair %{y:.6f}<br>Fair IV %{customdata[2]:.2f}%<br>Moneyness %{customdata[1]:.1f}%<extra></extra>'};
+  const markTrace={type:'scatter',mode:'markers',name:'Derive mark',x:rows.map(r=>r.strike),y:rows.map(r=>r.markPrice),marker:{color:theme.mark,size:6,line:{color:theme.markerFill,width:.75}},customdata:rows.map(r=>r.name),hovertemplate:'%{customdata}<br>Strike %{x}<br>Mark %{y:.6f}<extra></extra>'};
+  const bidTrace={type:'scatter',mode:'markers',name:'Bid',x:rows.filter(r=>r.bid!=null).map(r=>r.strike),y:rows.filter(r=>r.bid!=null).map(r=>r.bid),marker:{color:theme.bid,symbol:'triangle-down',size:7}};
+  const askTrace={type:'scatter',mode:'markers',name:'Ask',x:rows.filter(r=>r.ask!=null).map(r=>r.strike),y:rows.filter(r=>r.ask!=null).map(r=>r.ask),marker:{color:theme.ask,symbol:'triangle-up',size:7}};
   const valueLayout={...baseLayout,title:{text:`Fair value by strike · ${expiry}`,x:.04},xaxis:{...baseLayout.xaxis,title:'Strike'},yaxis:{...baseLayout.yaxis,title:'Option value'},margin:compact?compactMargin:{l:66,r:18,t:50,b:52}};
   if (!rows.length) valueLayout.annotations=emptyLayout('', 'No options for this selection').annotations;
   Plotly.react('fairValue',[fairTrace,markTrace,bidTrace,askTrace],valueLayout,config);
   const deviationTraces=[
-    {type:'bar',name:'Mark deviation',x:rows.map(r=>r.strike),y:rows.map(r=>r.markDeviation),marker:{color:rows.map(r=>r.markDeviation>=0?'#5f806d':'#b35d52'),line:{width:0}},opacity:.72,customdata:rows.map(r=>[r.name,r.markDeviationPct]),hovertemplate:'%{customdata[0]}<br>Deviation %{y:.6f}<br>%{customdata[1]:.2f}%<extra></extra>'},
-    {type:'scatter',mode:'markers',name:'Bid deviation',x:rows.filter(r=>r.bidDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.bidDeviation!=null).map(r=>r.bidDeviation),marker:{color:'#a64b40',symbol:'triangle-down',size:7}},
-    {type:'scatter',mode:'markers',name:'Ask deviation',x:rows.filter(r=>r.askDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.askDeviation!=null).map(r=>r.askDeviation),marker:{color:'#39745a',symbol:'triangle-up',size:7}}
+    {type:'bar',name:'Mark deviation',x:rows.map(r=>r.strike),y:rows.map(r=>r.markDeviation),marker:{color:rows.map(r=>r.markDeviation>=0?theme.positive:theme.negative),line:{width:0}},opacity:.72,customdata:rows.map(r=>[r.name,r.markDeviationPct]),hovertemplate:'%{customdata[0]}<br>Deviation %{y:.6f}<br>%{customdata[1]:.2f}%<extra></extra>'},
+    {type:'scatter',mode:'markers',name:'Bid deviation',x:rows.filter(r=>r.bidDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.bidDeviation!=null).map(r=>r.bidDeviation),marker:{color:theme.bid,symbol:'triangle-down',size:7}},
+    {type:'scatter',mode:'markers',name:'Ask deviation',x:rows.filter(r=>r.askDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.askDeviation!=null).map(r=>r.askDeviation),marker:{color:theme.ask,symbol:'triangle-up',size:7}}
   ];
   const deviationLayout={...baseLayout,title:{text:`Price deviation from fitted fair · ${expiry}`,x:.04},xaxis:{...baseLayout.xaxis,title:'Strike'},yaxis:{...baseLayout.yaxis,title:'Observed − fair',zeroline:true,zerolinewidth:1.5},margin:compact?compactMargin:{l:66,r:18,t:50,b:52},barmode:'overlay'};
   Plotly.react('deviation',deviationTraces,deviationLayout,config);
@@ -435,7 +452,17 @@ function render() {
   document.querySelector('#quotes').textContent=rows.filter(r=>r.bid!=null||r.ask!=null).length;
   renderVolatility(); renderValuation(); renderTable();
 }
+const themeToggle=document.querySelector('#themeToggle');
+function setTheme(theme,persist=false) {
+  document.documentElement.dataset.theme=theme;
+  themeToggle.textContent=theme==='dark'?'Light mode':'Dark mode';
+  themeToggle.setAttribute('aria-label',`Switch to ${theme==='dark'?'light':'dark'} mode`);
+  if(persist) try{localStorage.setItem('derive-theme',theme)}catch(error){}
+  baseLayout=makeBaseLayout();
+}
+setTheme(isDarkTheme()?'dark':'light');
 document.querySelector('#stamp').innerHTML=`Snapshot ${new Date(DATA.timestamp).toLocaleString()}<br>${DATA.environment} · ${DATA.currencies.length} option currencies · public data · no credential used`;
+themeToggle.addEventListener('click',()=>{setTheme(isDarkTheme()?'light':'dark',true);render();});
 currencySelect.addEventListener('change',()=>{syncExpiries();render();});
 document.querySelectorAll('#source,#contract,#range,#valuationExpiry').forEach(el=>el.addEventListener('change',render));
 syncExpiries(); render();
