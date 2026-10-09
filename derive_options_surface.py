@@ -387,11 +387,14 @@ function renderVolatility() {
   }
   const z=[],expiryLabels=[];
   for(const expiry of expiries){const points=groups[expiry].sort((a,b)=>a.moneyness-b.moneyness);z.push(xs.map(x=>interpolate(points,x,source)));expiryLabels.push(new Date(`${expiry}T00:00:00Z`).toLocaleDateString('en-US',{month:'short',day:'2-digit',year:'2-digit',timeZone:'UTC'}));}
-  const surfaceData=[
-    {type:'heatmap',x:xs,y:expiryLabels,z,zsmooth:'best',connectgaps:false,colorscale:SURFACE_COLORS,colorbar:{title:{text:'IV %',font:{size:11,color:'#555c63'}},thickness:12,outlinewidth:0,tickfont:{size:10,color:'#555c63'},tickformat:'.0f'},customdata:z.map((row,i)=>row.map(()=>expiries[i])),hovertemplate:'Expiry %{customdata}<br>Moneyness %{x:.1f}%<br>IV %{z:.2f}%<extra></extra>'},
-    {type:'contour',x:xs,y:expiryLabels,z,connectgaps:false,showscale:false,hoverinfo:'skip',contours:{coloring:'none',showlines:true,showlabels:!compact,labelfont:{size:9,color:'#20262b'}},line:{color:'rgba(20,28,32,.46)',width:.65}}
-  ];
-  Plotly.react('surface',surfaceData,{...baseLayout,title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} by expiry and moneyness`,x:.035},xaxis:{...baseLayout.xaxis,title:'Strike / forward (%)'},yaxis:{...baseLayout.yaxis,title:'Expiry (UTC)',type:'category',categoryorder:'array',categoryarray:expiryLabels},margin:compact?compactMargin:{l:74,r:48,t:52,b:56}},config);
+  const surfaceData=[{
+    type:'contour',x:xs,y:expiryLabels,z,connectgaps:false,
+    colorscale:[[0,'#eef2f3'],[.22,'#cbd9df'],[.48,'#89a9b8'],[.74,'#4f778f'],[1,'#17384f']],
+    colorbar:{title:{text:'IV %',font:{size:11,color:'#555c63'}},thickness:10,outlinewidth:0,tickfont:{size:10,color:'#555c63'}},
+    hovertemplate:'Expiry %{y}<br>Moneyness %{x:.1f}%<br>IV %{z:.2f}%<extra></extra>',
+    contours:{coloring:'heatmap',showlines:true,showlabels:!compact,labelfont:{size:9,color:'#31363b'}},line:{color:'#ffffff',width:.45}
+  }];
+  Plotly.react('surface',surfaceData,{...baseLayout,title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} surface`,x:.035},xaxis:{...baseLayout.xaxis,title:'Strike / forward (%)'},yaxis:{...baseLayout.yaxis,title:'Expiry (UTC)',type:'category',categoryorder:'array',categoryarray:expiryLabels},margin:compact?compactMargin:{l:74,r:48,t:52,b:56}},config);
   const smileTraces=expiries.map((expiry,i)=>({type:'scatter',mode:'lines+markers',name:expiry,x:groups[expiry].map(r=>r.moneyness),y:groups[expiry].map(r=>r[source]),line:{color:COLORS[i%COLORS.length],width:1.35},marker:{size:3,color:COLORS[i%COLORS.length]},hovertemplate:'%{x:.1f}% moneyness<br>%{y:.2f}% IV<extra>'+expiry+'</extra>'}));
   Plotly.react('smiles',smileTraces,{...baseLayout,title:{text:'Volatility smiles',x:.04},xaxis:{...baseLayout.xaxis,title:'Moneyness (%)'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},showlegend:false,margin:compact?compactMargin:{l:58,r:18,t:50,b:48}},config);
   const atm=expiries.map(expiry=>groups[expiry].reduce((best,r)=>Math.abs(r.moneyness-100)<Math.abs(best.moneyness-100)?r:best));
