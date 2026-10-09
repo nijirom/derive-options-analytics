@@ -291,7 +291,7 @@ HTML_TEMPLATE = r'''<!doctype html>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('derive-theme')||'dark'}catch(error){document.documentElement.dataset.theme='dark'}</script>
   <style>
-    :root { color-scheme:dark; --canvas:#000000; --surface:#0a0d12; --surface-alt:#10141b; --ink:#edf2f7; --muted:#929cab; --line:#252b35; --line-strong:#39414d; --navy:#7cb7e1; --navy-dark:#214f70; --green:#66c292; --red:#e06d66; --amber:#d7a74f; --table-head:#151a22; --row-alt:#0e1218; --row-hover:#17202b; --chart:#0a0d12; }
+    :root { color-scheme:dark; --canvas:#000000; --surface:#0a0d12; --surface-alt:#10141b; --ink:#edf2f7; --muted:#929cab; --line:#252b35; --line-strong:#39414d; --navy:#7cb7e1; --navy-dark:#214f70; --green:#66c292; --red:#e06d66; --amber:#d7a74f; --table-head:#151a22; --row-alt:#0e1218; --row-hover:#17202b; --chart:#000000; }
     html[data-theme="light"] { color-scheme:light; --canvas:#f4f4f1; --surface:#ffffff; --surface-alt:#f8f8f6; --ink:#1b1f23; --muted:#697078; --line:#d7d9d6; --line-strong:#b9bdb8; --navy:#214f70; --navy-dark:#17384f; --green:#39745a; --red:#a64b40; --amber:#9a6a24; --table-head:#eceeeb; --row-alt:#fafaf8; --row-hover:#eef3f6; --chart:#ffffff; }
     * { box-sizing:border-box; }
     html { background:var(--canvas); }
@@ -370,7 +370,7 @@ const isDarkTheme=()=>document.documentElement.dataset.theme!=='light';
 const seriesColors=()=>isDarkTheme()?DARK_COLORS:LIGHT_COLORS;
 function chartTheme(){
   return isDarkTheme()
-    ? {paper:'#0a0d12',ink:'#dfe6ee',muted:'#98a5b5',grid:'#273241',zero:'#526071',line:'#435064',hover:'#edf2f7',hoverInk:'#111418',primary:'#69bce5',markerFill:'#0a0d12',fair:'#7ec8ee',mark:'#efb84f',bid:'#ef7770',ask:'#62cf98',positive:'#62a77e',negative:'#c86763',scene:'#0c1525',sceneGrid:'#223249',sceneZero:'#3a4a61'}
+    ? {paper:'#0a0d12',ink:'#dfe6ee',muted:'#98a5b5',grid:'#273241',zero:'#526071',line:'#435064',hover:'#edf2f7',hoverInk:'#111418',primary:'#69bce5',markerFill:'#0a0d12',fair:'#7ec8ee',mark:'#efb84f',bid:'#ef7770',ask:'#62cf98',positive:'#62a77e',negative:'#c86763',scene:'#000000',sceneGrid:'#223249',sceneZero:'#3a4a61'}
     : {paper:'#ffffff',ink:'#31363b',muted:'#697078',grid:'#e3e5e2',zero:'#aeb4b0',line:'#c5c9c5',hover:'#1f252a',hoverInk:'#ffffff',primary:'#214f70',markerFill:'#ffffff',fair:'#17384f',mark:'#9a6a24',bid:'#a64b40',ask:'#39745a',positive:'#5f806d',negative:'#b35d52',scene:'#ffffff',sceneGrid:'#dde1e4',sceneZero:'#aeb4b0'};
 }
 function makeBaseLayout(){
