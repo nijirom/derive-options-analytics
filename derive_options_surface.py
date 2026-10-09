@@ -290,34 +290,45 @@ HTML_TEMPLATE = r'''<!doctype html>
   <title>Derive options surfaces and fair value</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    :root { color-scheme:dark; --bg:#070b14; --panel:#0e1628; --line:#22304a; --text:#e8edf7; --muted:#93a4bf; --cyan:#41d9ff; --violet:#9b7bff; --green:#63e6a3; --red:#ff668a; }
+    :root { color-scheme:light; --canvas:#f4f4f1; --surface:#ffffff; --surface-alt:#f8f8f6; --ink:#1b1f23; --muted:#697078; --line:#d7d9d6; --line-strong:#b9bdb8; --navy:#214f70; --navy-dark:#17384f; --green:#39745a; --red:#a64b40; --amber:#9a6a24; }
     * { box-sizing:border-box; }
-    body { margin:0; background:radial-gradient(circle at 15% 0,#12203d 0,transparent 34%),var(--bg); color:var(--text); font:14px/1.45 Inter,Segoe UI,sans-serif; }
-    header { padding:28px 32px 18px; display:flex; justify-content:space-between; align-items:end; gap:20px; }
-    h1 { margin:0; font-size:28px; letter-spacing:-.5px; } h1 span { color:var(--cyan); }
-    .subtitle,.stamp { color:var(--muted); } .stamp { text-align:right; font-size:12px; }
-    .controls { margin:0 32px 18px; padding:14px 16px; display:flex; align-items:center; gap:18px; flex-wrap:wrap; background:#0b1323cc; border:1px solid var(--line); border-radius:12px; }
-    label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
-    select { margin-left:8px; border:1px solid #31415f; border-radius:7px; background:#121d32; color:var(--text); padding:7px 28px 7px 9px; }
-    .cards { margin:0 32px 18px; display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
-    .card,.panel { background:linear-gradient(145deg,#101a2d,#0a111f); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 35px #0004; }
-    .card { padding:15px 17px; } .card .k { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.08em; } .card .v { margin-top:4px; font-size:22px; font-weight:650; }
-    main { padding:0 32px 32px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-    .panel { min-width:0; padding:8px; } .wide { grid-column:1/-1; }
-    #surface { height:590px; } #term,#smiles,#fairValue,#deviation { height:350px; }
-    .section-title { padding:12px 14px 0; font-size:13px; color:var(--muted); }
-    .table-wrap { overflow:auto; max-height:460px; padding:0; }
-    table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
-    th { position:sticky; top:0; z-index:1; background:#111b2e; color:var(--muted); text-align:right; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
-    th,td { padding:9px 11px; border-bottom:1px solid #1d2940; white-space:nowrap; text-align:right; }
-    th:first-child,td:first-child { text-align:left; } tbody tr:hover { background:#15213a; }
-    .note { color:var(--muted); padding:5px 8px 10px; font-size:12px; }
-    @media (max-width:1000px) { .cards { grid-template-columns:repeat(2,1fr); } main { grid-template-columns:1fr; } .wide { grid-column:auto; } }
-    @media (max-width:650px) { header { align-items:start; flex-direction:column; } .stamp { text-align:left; } header,.controls,.cards,main { margin-left:14px; margin-right:14px; padding-left:0; padding-right:0; } header { padding-top:20px; } #surface { height:500px; } }
+    html { background:var(--canvas); }
+    body { margin:0; border-top:4px solid var(--navy-dark); background:var(--canvas); color:var(--ink); font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif; }
+    header { width:min(1480px,calc(100% - 48px)); margin:0 auto; padding:30px 0 22px; display:flex; justify-content:space-between; align-items:flex-end; gap:32px; border-bottom:1px solid var(--line-strong); }
+    .header-copy { min-width:0; }
+    .eyebrow { margin-bottom:7px; color:var(--navy); font:600 11px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { margin:0; color:var(--ink); font-size:30px; font-weight:620; letter-spacing:-.035em; } h1 span { color:inherit; }
+    .subtitle { margin-top:7px; color:var(--muted); font-size:13px; }
+    .stamp { padding-left:22px; border-left:1px solid var(--line); color:var(--muted); text-align:right; font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:nowrap; }
+    .controls { width:min(1480px,calc(100% - 48px)); margin:16px auto; padding:14px 16px; display:grid; grid-template-columns:repeat(5,minmax(130px,1fr)); gap:14px; background:var(--surface); border:1px solid var(--line); }
+    label { display:flex; flex-direction:column; gap:6px; color:var(--muted); font-size:10px; font-weight:650; text-transform:uppercase; letter-spacing:.09em; }
+    select { width:100%; min-height:34px; margin:0; border:1px solid var(--line-strong); border-radius:2px; background:var(--surface); color:var(--ink); padding:6px 9px; font:500 13px/1.2 inherit; outline:none; }
+    select:hover { border-color:#878d88; } select:focus { border-color:var(--navy); box-shadow:0 0 0 2px #214f7018; }
+    .cards { width:min(1480px,calc(100% - 48px)); margin:0 auto 16px; display:grid; grid-template-columns:repeat(5,1fr); background:var(--surface); border:1px solid var(--line); }
+    .card { min-width:0; padding:14px 16px; border-right:1px solid var(--line); } .card:last-child { border-right:0; }
+    .card .k { color:var(--muted); font-size:10px; font-weight:650; text-transform:uppercase; letter-spacing:.08em; }
+    .card .v { margin-top:5px; color:var(--ink); font-size:21px; font-weight:620; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+    main { width:min(1480px,calc(100% - 48px)); margin:0 auto; padding:0 0 40px; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .panel { min-width:0; padding:8px; overflow:hidden; background:var(--surface); border:1px solid var(--line); } .wide { grid-column:1/-1; }
+    #surface { height:500px; } #term,#smiles,#fairValue,#deviation { height:350px; }
+    .js-plotly-plot,.plot-container,.svg-container { max-width:100%!important; }
+    .chain-panel { padding:0; }
+    .table-caption { display:flex; justify-content:space-between; gap:16px; padding:11px 12px; border-bottom:1px solid var(--line); color:#343a40; font-size:12px; font-weight:600; }
+    .table-caption .hint { color:var(--muted); font-size:10px; font-weight:500; letter-spacing:.02em; }
+    .table-wrap { max-height:460px; overflow:auto; }
+    table { width:100%; border-collapse:collapse; color:var(--ink); font-size:12px; font-variant-numeric:tabular-nums; }
+    th { position:sticky; top:0; z-index:1; background:#eceeeb; color:#555c63; text-align:right; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; }
+    th,td { padding:9px 10px; border-bottom:1px solid #e4e6e3; white-space:nowrap; text-align:right; }
+    th:first-child,td:first-child { text-align:left; } tbody tr:nth-child(even) { background:#fafaf8; } tbody tr:hover { background:#eef3f6; }
+    .positive { color:var(--green); } .negative { color:var(--red); }
+    .note { min-height:36px; padding:3px 10px 9px; color:var(--muted); font-size:11px; line-height:1.45; }
+    @media (max-width:1000px) { .controls { grid-template-columns:repeat(3,1fr); } .cards { grid-template-columns:repeat(2,1fr); } .card { border-bottom:1px solid var(--line); } main { grid-template-columns:1fr; } .wide { grid-column:auto; } }
+    @media (max-width:650px) { body { border-top-width:3px; overflow-x:hidden; } header { align-items:flex-start; flex-direction:column; padding-top:22px; } .stamp { max-width:100%; padding:0; border:0; text-align:left; white-space:normal; overflow-wrap:anywhere; word-break:break-word; } header,.controls,.cards,main { width:calc(100vw - 24px); max-width:calc(100vw - 24px); } .controls { grid-template-columns:1fr; } label,select,.card,.panel { min-width:0; max-width:100%; } .cards { grid-template-columns:1fr 1fr; } .card .k { overflow-wrap:anywhere; } .card:nth-child(5) { grid-column:1/-1; border-right:0; } h1 { font-size:25px; } #surface { height:400px; } #term,#smiles,#fairValue,#deviation { height:310px; } }
+    @media (max-width:480px) { .cards { grid-template-columns:1fr; } .card { border-right:0; } .card:nth-child(5) { grid-column:auto; } }
   </style>
 </head>
 <body>
-  <header><div><h1><span id="currencyName"></span> options analytics</h1><div class="subtitle">Volatility surfaces, Derive fair value, and live quote deviations</div></div><div class="stamp" id="stamp"></div></header>
+  <header><div class="header-copy"><div class="eyebrow">Derive options monitor</div><h1><span id="currencyName"></span> volatility &amp; valuation</h1><div class="subtitle">Cross-sectional volatility, model fair value, and market dislocation</div></div><div class="stamp" id="stamp"></div></header>
   <section class="controls">
     <label>Currency<select id="currency"></select></label>
     <label>Vol source<select id="source"><option value="markIv">Mark IV</option><option value="bidIv">Bid IV</option><option value="askIv">Ask IV</option></select></label>
@@ -338,15 +349,19 @@ HTML_TEMPLATE = r'''<!doctype html>
     <section class="panel"><div id="term"></div></section>
     <section class="panel"><div id="fairValue"></div><div class="note">Fair value uses Black-76 with a leave-one-out local quadratic fit of neighboring Derive mark IVs. Derive mark and live quotes remain separate observations.</div></section>
     <section class="panel"><div id="deviation"></div><div class="note">Deviation is observed price minus fitted fair value. Bid/ask points appear only when live quotes exist; missing quotes are never treated as zero.</div></section>
-    <section class="panel wide table-wrap"><table><thead><tr><th>Instrument</th><th>Days</th><th>Moneyness</th><th>Mark IV</th><th>Fair IV</th><th>Mark</th><th>Fair value</th><th>Mark dev</th><th>Bid</th><th>Bid dev</th><th>Ask</th><th>Ask dev</th><th>OI</th></tr></thead><tbody id="rows"></tbody></table></section>
+    <section class="panel wide chain-panel"><div class="table-caption"><span>Selected expiry option chain</span><span class="hint">Scroll horizontally for all fields</span></div><div class="table-wrap"><table><thead><tr><th>Instrument</th><th>Days</th><th>Moneyness</th><th>Mark IV</th><th>Fair IV</th><th>Mark</th><th>Fair value</th><th>Mark dev</th><th>Bid</th><th>Bid dev</th><th>Ask</th><th>Ask dev</th><th>OI</th></tr></thead><tbody id="rows"></tbody></table></div></section>
   </main>
 <script>
 const DATA = __PAYLOAD__;
-const COLORS = ['#41d9ff','#9b7bff','#ffb657','#ff668a','#63e6a3','#6da5ff','#d979ff','#f6df62','#55c2a9','#fc8d62','#8da0cb','#e78ac3','#a6d854','#ffd92f'];
-const baseLayout = {paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{color:'#cbd5e8',family:'Inter,Segoe UI,sans-serif'},margin:{l:58,r:28,t:52,b:48},legend:{orientation:'h',y:-.2},xaxis:{gridcolor:'#22304a',zerolinecolor:'#526581'},yaxis:{gridcolor:'#22304a',zerolinecolor:'#526581'}};
+const COLORS = ['#214f70','#9a6a24','#39745a','#7d556f','#50796f','#8b5f46','#536f8a','#7b744a','#48667a','#8a625d','#5f6a72','#6f604e','#3f725f','#72566f'];
+const axisStyle={gridcolor:'#e3e5e2',zerolinecolor:'#aeb4b0',linecolor:'#c5c9c5',tickcolor:'#c5c9c5',showline:true,linewidth:1,automargin:true};
+const baseLayout={paper_bgcolor:'#ffffff',plot_bgcolor:'#ffffff',font:{color:'#31363b',family:'-apple-system,BlinkMacSystemFont,\"Segoe UI\",Arial,sans-serif',size:12},title:{font:{size:14,color:'#24292e'},y:.96},margin:{l:62,r:24,t:52,b:52},legend:{orientation:'h',y:-.2,font:{size:11,color:'#555c63'}},xaxis:{...axisStyle},yaxis:{...axisStyle},hoverlabel:{bgcolor:'#1f252a',bordercolor:'#1f252a',font:{color:'#ffffff',size:12}}};
 const config = {responsive:true,displaylogo:false,modeBarButtonsToRemove:['lasso2d','select2d']};
+const compact=window.matchMedia('(max-width:650px)').matches;
+const compactMargin={l:46,r:10,t:46,b:44};
 const fmt = (x,d=1) => x == null ? '—' : Number(x).toFixed(d);
 const pct = (x,d=1) => x == null ? '—' : Number(x).toFixed(d)+'%';
+const tone = value => value == null ? '' : (value >= 0 ? 'positive' : 'negative');
 const price = x => x == null ? '—' : Number(x).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6});
 const groupBy = (rows,key) => rows.reduce((groups,row)=>{ const value=row[key]; (groups[value]??=[]).push(row); return groups; },{});
 const currencySelect=document.querySelector('#currency'), expirySelect=document.querySelector('#valuationExpiry');
@@ -359,7 +374,7 @@ function rangeBounds() { return document.querySelector('#range').value.split(','
 function chosen() { const source=document.querySelector('#source').value,[lo,hi]=rangeBounds(); return currencyRows().filter(r=>r[source]!=null&&r.moneyness>=lo&&r.moneyness<=hi&&eligible(r)); }
 function syncExpiries() { const previous=expirySelect.value, rows=currencyRows(), expiries=[...new Set(rows.map(r=>r.expiryDate))].sort(), preferred=expiries.find(expiry=>rows.some(r=>r.expiryDate===expiry&&r.days>=7))??expiries[0]; expirySelect.replaceChildren(...expiries.map(value=>new Option(value,value))); expirySelect.value=expiries.includes(previous)?previous:preferred; }
 function interpolate(points,x,source) { if (!points.length||x<points[0].moneyness||x>points[points.length-1].moneyness) return null; for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i];if(x<=b.moneyness){const width=b.moneyness-a.moneyness;return width===0?(a[source]+b[source])/2:a[source]+(b[source]-a[source])*(x-a.moneyness)/width;}} return points.at(-1)[source]; }
-function emptyLayout(title,message) { return {...baseLayout,title:{text:title,x:.04},annotations:[{text:message,x:.5,y:.5,xref:'paper',yref:'paper',showarrow:false,font:{color:'#93a4bf',size:14}}]}; }
+function emptyLayout(title,message) { return {...baseLayout,title:{text:title,x:.04},annotations:[{text:message,x:.5,y:.5,xref:'paper',yref:'paper',showarrow:false,font:{color:'#697078',size:13}}]}; }
 function renderVolatility() {
   const currency=currencySelect.value,source=document.querySelector('#source').value,rows=chosen(),groups=groupBy(rows,'expiryDate'),expiries=Object.keys(groups).sort();
   const [lo,hi]=rangeBounds(),step=(hi-lo)/40,xs=Array.from({length:41},(_,i)=>lo+i*step);
@@ -371,38 +386,39 @@ function renderVolatility() {
   }
   const z=[],ys=[];
   for(const expiry of expiries){const points=groups[expiry].sort((a,b)=>a.moneyness-b.moneyness);z.push(xs.map(x=>interpolate(points,x,source)));ys.push(points[0].days);}
-  Plotly.react('surface',[{type:'surface',x:xs,y:ys,z,connectgaps:false,colorscale:[[0,'#25145e'],[.25,'#3266b3'],[.5,'#21bfd2'],[.75,'#72e09a'],[1,'#ffe66d']],colorbar:{title:'IV %',thickness:13},hovertemplate:'Moneyness %{x:.1f}%<br>DTE %{y:.1f}<br>IV %{z:.2f}%<extra></extra>',contours:{z:{show:true,usecolormap:true,highlightcolor:'#fff',project:{z:true}}}}],{...baseLayout,title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} surface`,x:.03},scene:{bgcolor:'rgba(0,0,0,0)',xaxis:{title:'Strike / forward (%)',gridcolor:'#263551'},yaxis:{title:'Days to expiry',gridcolor:'#263551'},zaxis:{title:'Implied volatility (%)',gridcolor:'#263551'},camera:{eye:{x:1.55,y:1.55,z:.8}}},margin:{l:0,r:0,t:52,b:0}},config);
-  const smileTraces=expiries.map((expiry,i)=>({type:'scatter',mode:'lines+markers',name:expiry,x:groups[expiry].map(r=>r.moneyness),y:groups[expiry].map(r=>r[source]),line:{color:COLORS[i%COLORS.length],width:1.5},marker:{size:4},hovertemplate:'%{x:.1f}% moneyness<br>%{y:.2f}% IV<extra>'+expiry+'</extra>'}));
-  Plotly.react('smiles',smileTraces,{...baseLayout,title:{text:'Volatility smiles',x:.04},xaxis:{...baseLayout.xaxis,title:'Moneyness (%)'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},showlegend:false,margin:{l:58,r:18,t:50,b:48}},config);
+  Plotly.react('surface',[{type:'contour',x:xs,y:ys,z,connectgaps:false,colorscale:[[0,'#eef2f3'],[.22,'#cbd9df'],[.48,'#89a9b8'],[.74,'#4f778f'],[1,'#17384f']],colorbar:{title:{text:'IV %',font:{size:11,color:'#555c63'}},thickness:10,outlinewidth:0,tickfont:{size:10,color:'#555c63'}},hovertemplate:'Moneyness %{x:.1f}%<br>DTE %{y:.1f}<br>IV %{z:.2f}%<extra></extra>',contours:{coloring:'heatmap',showlines:true,showlabels:!compact,labelfont:{size:9,color:'#31363b'}},line:{color:'#ffffff',width:.45}}],{...baseLayout,title:{text:`${currency} ${document.querySelector('#source').selectedOptions[0].text} surface`,x:.035},xaxis:{...baseLayout.xaxis,title:'Strike / forward (%)'},yaxis:{...baseLayout.yaxis,title:'Days to expiry'},margin:compact?compactMargin:{l:70,r:48,t:52,b:56}},config);
+  const smileTraces=expiries.map((expiry,i)=>({type:'scatter',mode:'lines+markers',name:expiry,x:groups[expiry].map(r=>r.moneyness),y:groups[expiry].map(r=>r[source]),line:{color:COLORS[i%COLORS.length],width:1.35},marker:{size:3,color:COLORS[i%COLORS.length]},hovertemplate:'%{x:.1f}% moneyness<br>%{y:.2f}% IV<extra>'+expiry+'</extra>'}));
+  Plotly.react('smiles',smileTraces,{...baseLayout,title:{text:'Volatility smiles',x:.04},xaxis:{...baseLayout.xaxis,title:'Moneyness (%)'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},showlegend:false,margin:compact?compactMargin:{l:58,r:18,t:50,b:48}},config);
   const atm=expiries.map(expiry=>groups[expiry].reduce((best,r)=>Math.abs(r.moneyness-100)<Math.abs(best.moneyness-100)?r:best));
-  Plotly.react('term',[{type:'scatter',mode:'lines+markers',x:atm.map(r=>r.days),y:atm.map(r=>r[source]),text:atm.map(r=>r.expiryDate),line:{color:'#9b7bff',width:2},marker:{color:'#41d9ff',size:7},hovertemplate:'%{text}<br>DTE %{x:.1f}<br>ATM IV %{y:.2f}%<extra></extra>'}],{...baseLayout,title:{text:'ATM term structure',x:.04},xaxis:{...baseLayout.xaxis,title:'Days to expiry'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},margin:{l:58,r:18,t:50,b:48}},config);
+  Plotly.react('term',[{type:'scatter',mode:'lines+markers',x:atm.map(r=>r.days),y:atm.map(r=>r[source]),text:atm.map(r=>r.expiryDate),line:{color:'#214f70',width:2},marker:{color:'#ffffff',line:{color:'#214f70',width:1.5},size:6},hovertemplate:'%{text}<br>DTE %{x:.1f}<br>ATM IV %{y:.2f}%<extra></extra>'}],{...baseLayout,title:{text:'ATM term structure',x:.04},xaxis:{...baseLayout.xaxis,title:'Days to expiry'},yaxis:{...baseLayout.yaxis,title:'IV (%)'},margin:compact?compactMargin:{l:58,r:18,t:50,b:48}},config);
   document.querySelector('#atm').textContent=pct(atm[0][source],2); document.querySelector('#points').textContent=rows.length;
 }
 function renderValuation() {
   const currency=currencySelect.value,[lo,hi]=rangeBounds(),expiry=expirySelect.value;
   const rows=currencyRows().filter(r=>r.expiryDate===expiry&&r.moneyness>=lo&&r.moneyness<=hi&&eligible(r)).sort((a,b)=>a.strike-b.strike);
-  const fairTrace={type:'scatter',mode:'lines',name:'Fitted fair',x:rows.map(r=>r.strike),y:rows.map(r=>r.fairValue),line:{color:'#41d9ff',width:2.5},customdata:rows.map(r=>[r.name,r.moneyness,r.fairIv]),hovertemplate:'%{customdata[0]}<br>Strike %{x}<br>Fair %{y:.6f}<br>Fair IV %{customdata[2]:.2f}%<br>Moneyness %{customdata[1]:.1f}%<extra></extra>'};
-  const markTrace={type:'scatter',mode:'markers',name:'Derive mark',x:rows.map(r=>r.strike),y:rows.map(r=>r.markPrice),marker:{color:'#9b7bff',size:7},customdata:rows.map(r=>r.name),hovertemplate:'%{customdata}<br>Strike %{x}<br>Mark %{y:.6f}<extra></extra>'};
-  const bidTrace={type:'scatter',mode:'markers',name:'Bid',x:rows.filter(r=>r.bid!=null).map(r=>r.strike),y:rows.filter(r=>r.bid!=null).map(r=>r.bid),marker:{color:'#ff668a',symbol:'triangle-down',size:8}};
-  const askTrace={type:'scatter',mode:'markers',name:'Ask',x:rows.filter(r=>r.ask!=null).map(r=>r.strike),y:rows.filter(r=>r.ask!=null).map(r=>r.ask),marker:{color:'#63e6a3',symbol:'triangle-up',size:8}};
-  const valueLayout={...baseLayout,title:{text:`Fair value by strike · ${expiry}`,x:.04},xaxis:{...baseLayout.xaxis,title:'Strike'},yaxis:{...baseLayout.yaxis,title:'Option value'},margin:{l:66,r:18,t:50,b:52}};
+  const fairTrace={type:'scatter',mode:'lines',name:'Fitted fair',x:rows.map(r=>r.strike),y:rows.map(r=>r.fairValue),line:{color:'#17384f',width:2.25},customdata:rows.map(r=>[r.name,r.moneyness,r.fairIv]),hovertemplate:'%{customdata[0]}<br>Strike %{x}<br>Fair %{y:.6f}<br>Fair IV %{customdata[2]:.2f}%<br>Moneyness %{customdata[1]:.1f}%<extra></extra>'};
+  const markTrace={type:'scatter',mode:'markers',name:'Derive mark',x:rows.map(r=>r.strike),y:rows.map(r=>r.markPrice),marker:{color:'#9a6a24',size:6,line:{color:'#ffffff',width:.75}},customdata:rows.map(r=>r.name),hovertemplate:'%{customdata}<br>Strike %{x}<br>Mark %{y:.6f}<extra></extra>'};
+  const bidTrace={type:'scatter',mode:'markers',name:'Bid',x:rows.filter(r=>r.bid!=null).map(r=>r.strike),y:rows.filter(r=>r.bid!=null).map(r=>r.bid),marker:{color:'#a64b40',symbol:'triangle-down',size:7}};
+  const askTrace={type:'scatter',mode:'markers',name:'Ask',x:rows.filter(r=>r.ask!=null).map(r=>r.strike),y:rows.filter(r=>r.ask!=null).map(r=>r.ask),marker:{color:'#39745a',symbol:'triangle-up',size:7}};
+  const valueLayout={...baseLayout,title:{text:`Fair value by strike · ${expiry}`,x:.04},xaxis:{...baseLayout.xaxis,title:'Strike'},yaxis:{...baseLayout.yaxis,title:'Option value'},margin:compact?compactMargin:{l:66,r:18,t:50,b:52}};
   if (!rows.length) valueLayout.annotations=emptyLayout('', 'No options for this selection').annotations;
   Plotly.react('fairValue',[fairTrace,markTrace,bidTrace,askTrace],valueLayout,config);
   const deviationTraces=[
-    {type:'bar',name:'Mark deviation',x:rows.map(r=>r.strike),y:rows.map(r=>r.markDeviation),marker:{color:rows.map(r=>r.markDeviation>=0?'#9b7bff':'#4967a8'),opacity:.75},customdata:rows.map(r=>[r.name,r.markDeviationPct]),hovertemplate:'%{customdata[0]}<br>Deviation %{y:.6f}<br>%{customdata[1]:.2f}%<extra></extra>'},
-    {type:'scatter',mode:'markers',name:'Bid deviation',x:rows.filter(r=>r.bidDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.bidDeviation!=null).map(r=>r.bidDeviation),marker:{color:'#ff668a',symbol:'triangle-down',size:8}},
-    {type:'scatter',mode:'markers',name:'Ask deviation',x:rows.filter(r=>r.askDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.askDeviation!=null).map(r=>r.askDeviation),marker:{color:'#63e6a3',symbol:'triangle-up',size:8}}
+    {type:'bar',name:'Mark deviation',x:rows.map(r=>r.strike),y:rows.map(r=>r.markDeviation),marker:{color:rows.map(r=>r.markDeviation>=0?'#5f806d':'#b35d52'),line:{width:0}},opacity:.72,customdata:rows.map(r=>[r.name,r.markDeviationPct]),hovertemplate:'%{customdata[0]}<br>Deviation %{y:.6f}<br>%{customdata[1]:.2f}%<extra></extra>'},
+    {type:'scatter',mode:'markers',name:'Bid deviation',x:rows.filter(r=>r.bidDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.bidDeviation!=null).map(r=>r.bidDeviation),marker:{color:'#a64b40',symbol:'triangle-down',size:7}},
+    {type:'scatter',mode:'markers',name:'Ask deviation',x:rows.filter(r=>r.askDeviation!=null).map(r=>r.strike),y:rows.filter(r=>r.askDeviation!=null).map(r=>r.askDeviation),marker:{color:'#39745a',symbol:'triangle-up',size:7}}
   ];
-  const deviationLayout={...baseLayout,title:{text:`Price deviation from fitted fair · ${expiry}`,x:.04},xaxis:{...baseLayout.xaxis,title:'Strike'},yaxis:{...baseLayout.yaxis,title:'Observed − fair',zeroline:true,zerolinewidth:1.5},margin:{l:66,r:18,t:50,b:52},barmode:'overlay'};
+  const deviationLayout={...baseLayout,title:{text:`Price deviation from fitted fair · ${expiry}`,x:.04},xaxis:{...baseLayout.xaxis,title:'Strike'},yaxis:{...baseLayout.yaxis,title:'Observed − fair',zeroline:true,zerolinewidth:1.5},margin:compact?compactMargin:{l:66,r:18,t:50,b:52},barmode:'overlay'};
   Plotly.react('deviation',deviationTraces,deviationLayout,config);
 }
 function renderTable() {
   const rows=chosen().filter(r=>r.expiryDate===expirySelect.value).sort((a,b)=>a.strike-b.strike);
-  document.querySelector('#rows').innerHTML=rows.map(r=>`<tr><td>${r.name}</td><td>${fmt(r.days,1)}</td><td>${pct(r.moneyness,1)}</td><td>${pct(r.markIv,2)}</td><td>${pct(r.fairIv,2)}</td><td>${price(r.markPrice)}</td><td>${price(r.fairValue)}</td><td>${pct(r.markDeviationPct,2)}</td><td>${price(r.bid)}</td><td>${pct(r.bidDeviationPct,2)}</td><td>${price(r.ask)}</td><td>${pct(r.askDeviationPct,2)}</td><td>${fmt(r.openInterest,1)}</td></tr>`).join('');
+  document.querySelector('#rows').innerHTML=rows.map(r=>`<tr><td>${r.name}</td><td>${fmt(r.days,1)}</td><td>${pct(r.moneyness,1)}</td><td>${pct(r.markIv,2)}</td><td>${pct(r.fairIv,2)}</td><td>${price(r.markPrice)}</td><td>${price(r.fairValue)}</td><td class="${tone(r.markDeviationPct)}">${pct(r.markDeviationPct,2)}</td><td>${price(r.bid)}</td><td class="${tone(r.bidDeviationPct)}">${pct(r.bidDeviationPct,2)}</td><td>${price(r.ask)}</td><td class="${tone(r.askDeviationPct)}">${pct(r.askDeviationPct,2)}</td><td>${fmt(r.openInterest,1)}</td></tr>`).join('');
 }
 function render() {
   const rows=currencyRows(),nearest=rows.reduce((best,r)=>!best||r.days<best.days?r:best,null),expiries=new Set(rows.map(r=>r.expiryDate));
   document.querySelector('#currencyName').textContent=currencySelect.value;
+  requestAnimationFrame(()=>document.querySelectorAll('.js-plotly-plot').forEach(plot=>Plotly.Plots.resize(plot)));
   document.querySelector('#index').textContent=nearest?'$'+nearest.index.toLocaleString(undefined,{maximumFractionDigits:6}):'—';
   document.querySelector('#expiries').textContent=expiries.size;
   document.querySelector('#quotes').textContent=rows.filter(r=>r.bid!=null||r.ask!=null).length;
